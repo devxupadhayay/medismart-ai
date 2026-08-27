@@ -105,11 +105,12 @@
     </aside>
 
     <main class="main-content">
-        <!-- Top Navbar with Translation -->
+        <!-- Top Navbar (Cleaned up, no translate) -->
         <header class="top-nav">
             <div class="page-path">Dashboard / <span>Patient Diagnosis</span></div>
-            <!-- Google Translate Widget -->
-            <div id="google_translate_element"></div>
+            <div style="font-size: 0.9rem; color: #64748b; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-circle-user" style="font-size: 1.2rem; color: #0d9488;"></i> Dr. Admin
+            </div>
         </header>
 
         <div class="content-area">
@@ -179,24 +180,12 @@
         </div>
     </main>
 
-    <!-- Google Translate Script -->
-    <script type="text/javascript">
-        function googleTranslateElementInit() {
-            new google.translate.TranslateElement({
-                pageLanguage: 'en', 
-                includedLanguages: 'hi,mr,bn,te,ta,gu,kn,ur,en', // Major Indian Languages + English
-                layout: google.translate.TranslateElement.InlineLayout.SIMPLE
-            }, 'google_translate_element');
-        }
-    </script>
-    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
-
     <script>
         $(document).ready(function() {
             $('#symptoms').select2({ placeholder: "Search symptoms (e.g. fever)...", allowClear: true });
         });
 
-        // Voice to Text Feature
+        // Smart Voice to Text Feature (Keyword Matcher)
         function startVoiceRecognition() {
             if (!('webkitSpeechRecognition' in window)) {
                 alert("Voice feature is not supported in this browser. Please use Google Chrome.");
@@ -212,16 +201,29 @@
             };
             
             recognition.onresult = function(event) {
-                let spokenText = event.results[0][0].transcript;
-                // Open Select2 and put text in search box
-                $('#symptoms').select2('open');
-                setTimeout(() => {
-                    let searchBox = document.querySelector('.select2-search__field');
-                    if(searchBox) {
-                        searchBox.value = spokenText;
-                        searchBox.dispatchEvent(new Event('input', { bubbles: true }));
+                // Get the spoken sentence
+                let spokenText = event.results[0][0].transcript.toLowerCase();
+                let matchedSymptoms = [];
+                let currentVals = $('#symptoms').val() || [];
+
+                // Check every option in our database against what user said
+                $('#symptoms option').each(function() {
+                    let sympLabel = $(this).text().toLowerCase();
+                    let sympVal = $(this).val();
+                    
+                    // If spoken text contains the symptom keyword, add it to our array
+                    if (sympVal && spokenText.includes(sympLabel)) {
+                        matchedSymptoms.push(sympVal);
                     }
-                }, 100);
+                });
+
+                if (matchedSymptoms.length > 0) {
+                    // Combine old selections with new matches and remove duplicates
+                    let newVals = [...new Set([...currentVals, ...matchedSymptoms])];
+                    $('#symptoms').val(newVals).trigger('change');
+                } else {
+                    alert("System couldn't find exact medical keywords in: '" + spokenText + "'. Please try again with specific symptoms like 'fever' or 'headache'.");
+                }
             };
             
             recognition.onend = function() {
