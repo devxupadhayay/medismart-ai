@@ -3,3 +3,6 @@ pandas
 scikit-learn
 numpy
 gunicorn
+deep-translator==1.11.4
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.23.0
