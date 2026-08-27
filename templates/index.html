@@ -67,6 +67,28 @@
         /* Custom In-UI Error Alert */
         .error-msg { display: none; background: #fee2e2; color: #b91c1c; padding: 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.95rem; border: 1px solid #f87171; display: flex; align-items: center; gap: 10px; font-weight: 500; }
         .hidden-default { display: none; }
+
+        /* --- Mobile Responsive Design --- */
+        @media (max-width: 768px) {
+            body { flex-direction: column; height: auto; overflow-y: auto; }
+            
+            /* Sidebar becomes top navigation on mobile */
+            .sidebar { width: 100%; padding: 15px; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+            .sidebar-brand { margin-bottom: 10px; width: 100%; text-align: center; }
+            .nav-item { padding: 8px 12px; font-size: 0.85rem; flex: 1; text-align: center; justify-content: center; margin-bottom: 5px; }
+            .sidebar > div:last-child { display: none; } /* Hide system status on mobile to save space */
+            
+            /* Main Content Adjustments */
+            .main-content { padding: 20px 15px; }
+            .page-title { font-size: 1.4rem; text-align: center; }
+            .page-desc { text-align: center; font-size: 0.9rem; }
+            
+            /* UI Elements Adjustments */
+            .card { padding: 20px; }
+            .diagnosis-alert { flex-direction: column; text-align: center; padding: 15px; gap: 10px; }
+            .diagnosis-icon { margin: 0 auto; }
+            .grid-2 { grid-template-columns: 1fr; gap: 15px; }
+        }
     </style>
 </head>
 <body>
