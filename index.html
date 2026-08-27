@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediSmart AI | Enterprise Dashboard</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Select2 & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <style>
+        /* CSS Reset & Global Typography */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { display: flex; height: 100vh; background-color: #f8fafc; color: #334155; overflow: hidden; }
+
+        /* Professional Sidebar Layout */
+        .sidebar { width: 280px; background: #0f172a; color: #f8fafc; padding: 24px; display: flex; flex-direction: column; }
+        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 40px; display: flex; align-items: center; gap: 12px; color: #38bdf8; letter-spacing: 0.5px; }
+        
+        .nav-item { padding: 14px 16px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 14px; font-weight: 500; color: #94a3b8; }
+        .nav-item.active { background: #1e293b; color: #38bdf8; border-left: 4px solid #38bdf8; }
+        .nav-item:hover:not(.active) { background: #1e293b; color: #f1f5f9; }
+        .badge { background: #334155; font-size: 0.65rem; padding: 4px 8px; border-radius: 6px; margin-left: auto; text-transform: uppercase; font-weight: 700; color: #94a3b8; }
+
+        /* Main Workspace Area */
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; }
+        .page-header { margin-bottom: 32px; border-bottom: 1px solid #e2e8f0; padding-bottom: 24px; }
+        .page-title { font-size: 1.75rem; font-weight: 700; color: #0f172a; }
+        .page-desc { color: #64748b; margin-top: 6px; font-size: 1rem; }
+
+        /* Clean White Cards */
+        .card { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 10px; color: #1e293b; font-size: 0.95rem; }
+
+        /* Upgraded Select2 Input */
+        .select2-container--default .select2-selection--multiple { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; min-height: 56px; }
+        .select2-container--default.select2-container--focus .select2-selection--multiple { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); outline: none; }
+        .select2-selection__choice { background-color: #eff6ff !important; border: 1px solid #bfdbfe !important; color: #1d4ed8 !important; border-radius: 6px !important; padding: 6px 10px !important; font-weight: 500; }
+
+        /* Enterprise Button */
+        .btn-primary { background: #2563eb; color: white; border: none; padding: 16px 24px; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 10px; width: 100%; justify-content: center; margin-top: 20px; }
+        .btn-primary:hover { background: #1d4ed8; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2); }
+        
+        /* Smooth Result Section */
+        #result-section { display: none; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .diagnosis-alert { background: #fef2f2; border: 1px solid #fca5a5; padding: 24px; border-radius: 12px; display: flex; align-items: center; gap: 20px; }
+        .diagnosis-icon { background: #ef4444; color: white; width: 56px; height: 56px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2); }
+        .diagnosis-text h4 { color: #991b1b; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 700; }
+        .diagnosis-text h2 { color: #7f1d1d; font-size: 1.75rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+        .info-box { background: #f8fafc; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0; }
+        .info-box h3 { font-size: 1.1rem; color: #0f172a; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+        .info-box p { color: #475569; line-height: 1.6; font-size: 0.95rem; }
+        .info-box ul { padding-left: 20px; color: #475569; font-size: 0.95rem; }
+        .info-box li { margin-bottom: 10px; line-height: 1.5; }
+        .info-box li::marker { color: #2563eb; font-size: 1.2rem; }
+
+        /* Custom In-UI Error Alert */
+        .error-msg { display: none; background: #fee2e2; color: #b91c1c; padding: 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.95rem; border: 1px solid #f87171; display: flex; align-items: center; gap: 10px; font-weight: 500; }
+        .hidden-default { display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- Left Navigation Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-brand">
+            <i class="fa-solid fa-staff-snake"></i> MediSmart AI
+        </div>
+        
+        <div class="nav-item active">
+            <i class="fa-solid fa-microscope"></i> Symptom Analysis
+        </div>
+        <div class="nav-item">
+            <i class="fa-solid fa-pills"></i> Medicine OCR Scanner <span class="badge">Coming Soon</span>
+        </div>
+        <div class="nav-item">
+            <i class="fa-solid fa-map-location-dot"></i> Pharmacy Locator <span class="badge">Coming Soon</span>
+        </div>
+        
+        <div style="margin-top: auto; padding: 16px; background: #1e293b; border-radius: 8px; text-align: center;">
+            <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 4px;">System Status</div>
+            <div style="font-size: 0.85rem; color: #10b981; font-weight: 600;"><i class="fa-solid fa-circle-check"></i> ML Model Active</div>
+        </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="main-content">
+        <div class="page-header">
+            <h1 class="page-title">Patient Diagnosis Portal</h1>
+            <p class="page-desc">Select patient symptoms below to run the random forest classification model.</p>
+        </div>
+
+        <!-- Input Section -->
+        <div class="card">
+            <div class="error-msg hidden-default" id="error-alert">
+                <i class="fa-solid fa-triangle-exclamation"></i> Action Required: Please select at least one symptom to process the scan.
+            </div>
+            
+            <div class="form-group">
+                <label>Observed Clinical Symptoms</label>
+                <select id="symptoms" multiple="multiple" style="width: 100%;">
+                    {% for symp in symptoms %}
+                        <option value="{{ symp }}">{{ symp | replace('_', ' ') | title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <button class="btn-primary" id="predictBtn" onclick="predictDisease()">
+                <i class="fa-solid fa-microchip"></i> Execute AI Analysis
+            </button>
+        </div>
+
+        <!-- Output Section -->
+        <div id="result-section">
+            <div class="diagnosis-alert">
+                <div class="diagnosis-icon"><i class="fa-solid fa-virus-covid"></i></div>
+                <div class="diagnosis-text">
+                    <h4>Primary Prediction Result</h4>
+                    <h2 id="disease-name">Disease Name</h2>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="info-box">
+                    <h3><i class="fa-solid fa-file-medical text-primary" style="color: #2563eb;"></i> Medical Overview</h3>
+                    <p id="description-text"></p>
+                </div>
+                <div class="info-box">
+                    <h3><i class="fa-solid fa-clipboard-check text-success" style="color: #10b981;"></i> Recommended Protocol</h3>
+                    <ul id="precautions-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            $('#symptoms').select2({
+                placeholder: "Type to search database (e.g., fatigue, chills...)",
+                allowClear: true
+            });
+        });
+
+        function predictDisease() {
+            let selectedSymptoms = $('#symptoms').val();
+            let errorAlert = document.getElementById('error-alert');
+            let resultSection = document.getElementById('result-section');
+            let btn = document.getElementById('predictBtn');
+
+            if (!selectedSymptoms || selectedSymptoms.length === 0) {
+                errorAlert.style.display = 'flex';
+                resultSection.style.display = 'none';
+                return;
+            }
+            
+            errorAlert.style.display = 'none';
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing Neural Weights...';
+            btn.style.opacity = '0.7';
+
+            fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symptoms: selectedSymptoms })
+            })
+            .then(response => response.json())
+            .then(data => {
+                btn.innerHTML = '<i class="fa-solid fa-microchip"></i> Execute AI Analysis';
+                btn.style.opacity = '1';
+
+                if(data.error) {
+                    errorAlert.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.error}`;
+                    errorAlert.style.display = 'flex';
+                } else {
+                    resultSection.style.display = 'block';
+                    document.getElementById('disease-name').innerText = data.disease;
+                    document.getElementById('description-text').innerText = data.description;
+                    
+                    let precList = document.getElementById('precautions-list');
+                    precList.innerHTML = ""; 
+                    data.precautions.forEach(prec => {
+                        let li = document.createElement('li');
+                        li.innerText = prec;
+                        precList.appendChild(li);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                btn.innerHTML = '<i class="fa-solid fa-microchip"></i> Execute AI Analysis';
+                btn.style.opacity = '1';
+                errorAlert.innerHTML = '<i class="fa-solid fa-wifi"></i> Server communication error. Check your terminal.';
+                errorAlert.style.display = 'flex';
+            });
+        }
+    </script>
+</body>
+</html>
