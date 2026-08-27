@@ -47,7 +47,11 @@
         .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 28px; }
         
         .form-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 600; color: #0f766e; margin-bottom: 10px; }
-        .mic-btn { background: #f0fdfa; border: 1px solid #99f6e4; color: #0d9488; padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: 0.2s; display: flex; gap: 8px; align-items: center; font-size: 0.85rem; }
+        
+        /* Mic & Language Controls */
+        .voice-controls { display: flex; gap: 10px; align-items: center; }
+        .lang-select { border: 1px solid #99f6e4; border-radius: 8px; padding: 6px 10px; color: #0f766e; background: #f0fdfa; font-size: 0.85rem; font-weight: 500; outline: none; cursor: pointer; }
+        .mic-btn { background: #f0fdfa; border: 1px solid #99f6e4; color: #0d9488; padding: 8px 14px; border-radius: 8px; cursor: pointer; transition: 0.2s; display: flex; gap: 8px; align-items: center; font-size: 0.85rem; font-weight: 600; }
         .mic-btn:hover { background: #ccfbf1; }
         .mic-active { background: #fef2f2 !important; color: #ef4444 !important; border-color: #fca5a5 !important; }
 
@@ -86,7 +90,7 @@
             body { flex-direction: column; height: auto; overflow: visible; }
             .sidebar { width: 100%; height: auto; border-right: none; }
             .nav-menu { display: flex; overflow-x: auto; padding: 10px; }
-            .top-nav { flex-direction: column; gap: 10px; align-items: flex-start; }
+            .form-label { flex-direction: column; align-items: flex-start; gap: 10px; }
             .data-grid { grid-template-columns: 1fr; }
         }
     </style>
@@ -105,12 +109,9 @@
     </aside>
 
     <main class="main-content">
-        <!-- Top Navbar (Cleaned up, no translate) -->
+        <!-- Top Navbar (Cleaned up, no Dr. Admin) -->
         <header class="top-nav">
             <div class="page-path">Dashboard / <span>Patient Diagnosis</span></div>
-            <div style="font-size: 0.9rem; color: #64748b; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-circle-user" style="font-size: 1.2rem; color: #0d9488;"></i> Dr. Admin
-            </div>
         </header>
 
         <div class="content-area">
@@ -127,10 +128,18 @@
                 
                 <div class="form-label">
                     <span><i class="fa-solid fa-notes-medical"></i> Observed Symptoms</span>
-                    <!-- Voice Input Button -->
-                    <button class="mic-btn" id="micBtn" onclick="startVoiceRecognition()">
-                        <i class="fa-solid fa-microphone"></i> Tap to Speak
-                    </button>
+                    
+                    <!-- Voice Controls with Language Selection -->
+                    <div class="voice-controls">
+                        <select id="micLang" class="lang-select">
+                            <option value="en-IN">English</option>
+                            <option value="hi-IN">हिंदी (Hindi)</option>
+                            <option value="mr-IN">मराठी (Marathi)</option>
+                        </select>
+                        <button class="mic-btn" id="micBtn" onclick="startVoiceRecognition()">
+                            <i class="fa-solid fa-microphone"></i> Speak
+                        </button>
+                    </div>
                 </div>
                 
                 <select id="symptoms" multiple="multiple" style="width: 100%;">
@@ -185,14 +194,17 @@
             $('#symptoms').select2({ placeholder: "Search symptoms (e.g. fever)...", allowClear: true });
         });
 
-        // Smart Voice to Text Feature (Keyword Matcher)
+        // Smart Voice to Text with AI Translation Dictionary
         function startVoiceRecognition() {
             if (!('webkitSpeechRecognition' in window)) {
                 alert("Voice feature is not supported in this browser. Please use Google Chrome.");
                 return;
             }
             let recognition = new webkitSpeechRecognition();
-            recognition.lang = 'en-US';
+            
+            // Get selected language from dropdown
+            recognition.lang = document.getElementById('micLang').value; 
+            
             let micBtn = document.getElementById('micBtn');
             
             recognition.onstart = function() {
@@ -203,32 +215,49 @@
             recognition.onresult = function(event) {
                 // Get the spoken sentence
                 let spokenText = event.results[0][0].transcript.toLowerCase();
+                
+                // Advanced Feature: AI Dictionary for Hindi/Marathi to English Mapping
+                const translationDict = {
+                    "बुखार": "fever", "bukhar": "fever", "ताप": "fever",
+                    "सिरदर्द": "headache", "sir dard": "headache", "डोकेदुखी": "headache",
+                    "थकान": "fatigue", "thakan": "fatigue", "थकवा": "fatigue",
+                    "खांसी": "cough", "khasi": "cough", "खोकला": "cough",
+                    "उल्टी": "vomiting", "ulti": "vomiting", "उलट्या": "vomiting",
+                    "ठंड": "chills", "thand": "chills", "थंडी": "chills",
+                    "खुजली": "itching", "khujli": "itching", "खाज": "itching"
+                };
+
+                // Add translated English words into the spoken text string secretly
+                for (let [localWord, engWord] of Object.entries(translationDict)) {
+                    if (spokenText.includes(localWord)) {
+                        spokenText += " " + engWord; 
+                    }
+                }
+
                 let matchedSymptoms = [];
                 let currentVals = $('#symptoms').val() || [];
 
-                // Check every option in our database against what user said
+                // Check dataset options against the text (which now has english words too)
                 $('#symptoms option').each(function() {
                     let sympLabel = $(this).text().toLowerCase();
                     let sympVal = $(this).val();
                     
-                    // If spoken text contains the symptom keyword, add it to our array
                     if (sympVal && spokenText.includes(sympLabel)) {
                         matchedSymptoms.push(sympVal);
                     }
                 });
 
                 if (matchedSymptoms.length > 0) {
-                    // Combine old selections with new matches and remove duplicates
                     let newVals = [...new Set([...currentVals, ...matchedSymptoms])];
                     $('#symptoms').val(newVals).trigger('change');
                 } else {
-                    alert("System couldn't find exact medical keywords in: '" + spokenText + "'. Please try again with specific symptoms like 'fever' or 'headache'.");
+                    alert("System couldn't find exact medical keywords in: '" + spokenText + "'. Try specific terms like 'Fever' or 'बुखार'.");
                 }
             };
             
             recognition.onend = function() {
                 micBtn.classList.remove('mic-active');
-                micBtn.innerHTML = '<i class="fa-solid fa-microphone"></i> Tap to Speak';
+                micBtn.innerHTML = '<i class="fa-solid fa-microphone"></i> Speak';
             };
             
             recognition.start();
