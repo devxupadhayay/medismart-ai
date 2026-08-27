@@ -1,5 +1,7 @@
 Flask
 scikit-learn
 numpy
+pandas
 deep-translator
 fuzzywuzzy
+gunicorn
