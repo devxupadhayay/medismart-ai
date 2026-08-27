@@ -46,7 +46,8 @@
         /* --- Medical Cards --- */
         .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 28px; }
         
-        .form-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 600; color: #0f766e; margin-bottom: 10px; }
+        .form-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 600; color: #0f766e; margin-bottom: 10px; margin-top: 20px;}
+        .form-label:first-child { margin-top: 0; }
         
         /* Mic & Language Controls */
         .voice-controls { display: flex; gap: 10px; align-items: center; }
@@ -55,13 +56,17 @@
         .mic-btn:hover { background: #ccfbf1; }
         .mic-active { background: #fef2f2 !important; color: #ef4444 !important; border-color: #fca5a5 !important; }
 
+        /* NLP Text Area */
+        .nlp-textarea { width: 100%; border: 2px solid #e2e8f0; border-radius: 12px; padding: 12px; font-size: 0.95rem; font-family: 'Inter'; outline: none; transition: border-color 0.3s; resize: none; margin-bottom: 10px; }
+        .nlp-textarea:focus { border-color: #0d9488; }
+
         /* Select2 Medical UI */
         .select2-container--default .select2-selection--multiple { border: 2px solid #e2e8f0; border-radius: 12px; padding: 8px; min-height: 52px; transition: border-color 0.3s; }
         .select2-container--default.select2-container--focus .select2-selection--multiple { border-color: #0d9488; outline: none; }
         .select2-selection__choice { background-color: #f0fdfa !important; border: 1px solid #99f6e4 !important; color: #0f766e !important; border-radius: 6px !important; padding: 6px 10px !important; font-size: 0.85rem; font-weight: 600; }
 
         /* Medical Button */
-        .btn-primary { background: #0d9488; color: #ffffff; border: none; padding: 14px 24px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 20px; box-shadow: 0 4px 10px rgba(13, 148, 136, 0.2); }
+        .btn-primary { background: #0d9488; color: #ffffff; border: none; padding: 14px 24px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 25px; box-shadow: 0 4px 10px rgba(13, 148, 136, 0.2); }
         .btn-primary:hover { background: #0f766e; transform: translateY(-1px); box-shadow: 0 6px 15px rgba(13, 148, 136, 0.3); }
 
         /* Loading & Alerts */
@@ -109,31 +114,30 @@
     </aside>
 
     <main class="main-content">
-        <!-- Top Navbar (Cleaned up, no Dr. Admin) -->
+        <!-- Top Navbar -->
         <header class="top-nav">
             <div class="page-path">Dashboard / <span>Patient Diagnosis</span></div>
         </header>
 
         <div class="content-area">
             <div class="dashboard-header">
-                <h1>AI Diagnosis Portal</h1>
-                <p>Select or speak your symptoms for preliminary medical insights.</p>
+                <h1>AI Diagnosis Portal (NLP Active)</h1>
+                <p>Select symptoms manually or describe them in your language for our AI to process.</p>
             </div>
 
             <!-- Input Module -->
             <div class="card">
                 <div class="error-msg" id="error-alert">
-                    <i class="fa-solid fa-triangle-exclamation"></i> Required: Please select at least one symptom.
+                    <i class="fa-solid fa-triangle-exclamation"></i> Required: Please provide at least one symptom.
                 </div>
-                
+
+                <!-- NEW: NLP Text Area -->
                 <div class="form-label">
-                    <span><i class="fa-solid fa-notes-medical"></i> Observed Symptoms</span>
-                    
-                    <!-- Voice Controls with Language Selection -->
+                    <span><i class="fa-solid fa-comment-medical"></i> Describe Symptoms (AI Processed)</span>
                     <div class="voice-controls">
                         <select id="micLang" class="lang-select">
-                            <option value="en-IN">English</option>
                             <option value="hi-IN">हिंदी (Hindi)</option>
+                            <option value="en-IN">English</option>
                             <option value="mr-IN">मराठी (Marathi)</option>
                         </select>
                         <button class="mic-btn" id="micBtn" onclick="startVoiceRecognition()">
@@ -141,7 +145,12 @@
                         </button>
                     </div>
                 </div>
+                <textarea id="nlpInput" class="nlp-textarea" rows="3" placeholder="E.g., Mujhe kal raat se bahut tez bukhar aur khasi hai..."></textarea>
                 
+                <!-- Manual Select -->
+                <div class="form-label">
+                    <span><i class="fa-solid fa-list-check"></i> Or Select Manually</span>
+                </div>
                 <select id="symptoms" multiple="multiple" style="width: 100%;">
                     {% for symp in symptoms %}
                         <option value="{{ symp }}">{{ symp | replace('_', ' ') | title }}</option>
@@ -149,12 +158,12 @@
                 </select>
                 
                 <button class="btn-primary" id="predictBtn" onclick="runDiagnostics()">
-                    <i class="fa-solid fa-laptop-medical"></i> Run Health Scan
+                    <i class="fa-solid fa-microchip"></i> Process Data & Predict
                 </button>
 
                 <div class="progress-wrapper" id="progress-wrapper">
                     <div class="progress-text">
-                        <span id="progress-status">Analyzing medical database...</span>
+                        <span id="progress-status">Running Natural Language Processing (NLP)...</span>
                         <span id="progress-percentage">0%</span>
                     </div>
                     <div class="progress-track">
@@ -175,7 +184,7 @@
 
                 <div class="data-grid">
                     <div class="data-card">
-                        <div class="data-card-header"><i class="fa-solid fa-file-waveform"></i> Medical Overview</div>
+                        <div class="data-card-header"><i class="fa-solid fa-file-waveform"></i> AI Medical Overview</div>
                         <div class="data-card-body" id="description-text"></div>
                     </div>
                     <div class="data-card">
@@ -191,21 +200,19 @@
 
     <script>
         $(document).ready(function() {
-            $('#symptoms').select2({ placeholder: "Search symptoms (e.g. fever)...", allowClear: true });
+            $('#symptoms').select2({ placeholder: "Search symptoms manually...", allowClear: true });
         });
 
-        // Smart Voice to Text with AI Translation Dictionary
+        // Simple Voice Recognition - just writes to text box!
         function startVoiceRecognition() {
             if (!('webkitSpeechRecognition' in window)) {
                 alert("Voice feature is not supported in this browser. Please use Google Chrome.");
                 return;
             }
             let recognition = new webkitSpeechRecognition();
-            
-            // Get selected language from dropdown
             recognition.lang = document.getElementById('micLang').value; 
-            
             let micBtn = document.getElementById('micBtn');
+            let nlpInput = document.getElementById('nlpInput');
             
             recognition.onstart = function() {
                 micBtn.classList.add('mic-active');
@@ -213,46 +220,9 @@
             };
             
             recognition.onresult = function(event) {
-                // Get the spoken sentence
-                let spokenText = event.results[0][0].transcript.toLowerCase();
-                
-                // Advanced Feature: AI Dictionary for Hindi/Marathi to English Mapping
-                const translationDict = {
-                    "बुखार": "fever", "bukhar": "fever", "ताप": "fever",
-                    "सिरदर्द": "headache", "sir dard": "headache", "डोकेदुखी": "headache",
-                    "थकान": "fatigue", "thakan": "fatigue", "थकवा": "fatigue",
-                    "खांसी": "cough", "khasi": "cough", "खोकला": "cough",
-                    "उल्टी": "vomiting", "ulti": "vomiting", "उलट्या": "vomiting",
-                    "ठंड": "chills", "thand": "chills", "थंडी": "chills",
-                    "खुजली": "itching", "khujli": "itching", "खाज": "itching"
-                };
-
-                // Add translated English words into the spoken text string secretly
-                for (let [localWord, engWord] of Object.entries(translationDict)) {
-                    if (spokenText.includes(localWord)) {
-                        spokenText += " " + engWord; 
-                    }
-                }
-
-                let matchedSymptoms = [];
-                let currentVals = $('#symptoms').val() || [];
-
-                // Check dataset options against the text (which now has english words too)
-                $('#symptoms option').each(function() {
-                    let sympLabel = $(this).text().toLowerCase();
-                    let sympVal = $(this).val();
-                    
-                    if (sympVal && spokenText.includes(sympLabel)) {
-                        matchedSymptoms.push(sympVal);
-                    }
-                });
-
-                if (matchedSymptoms.length > 0) {
-                    let newVals = [...new Set([...currentVals, ...matchedSymptoms])];
-                    $('#symptoms').val(newVals).trigger('change');
-                } else {
-                    alert("System couldn't find exact medical keywords in: '" + spokenText + "'. Try specific terms like 'Fever' or 'बुखार'.");
-                }
+                let spokenText = event.results[0][0].transcript;
+                // Add the spoken text to the text area
+                nlpInput.value += (nlpInput.value ? " " : "") + spokenText;
             };
             
             recognition.onend = function() {
@@ -263,9 +233,11 @@
             recognition.start();
         }
 
-        // Diagnostics logic
+        // Diagnostics logic sending Data to Backend
         function runDiagnostics() {
-            let selectedSymptoms = $('#symptoms').val();
+            let selectedSymptoms = $('#symptoms').val() || [];
+            let nlpText = document.getElementById('nlpInput').value.trim();
+            
             let errorAlert = document.getElementById('error-alert');
             let resultSection = document.getElementById('result-section');
             let btn = document.getElementById('predictBtn');
@@ -274,7 +246,15 @@
             let progText = document.getElementById('progress-status');
             let progPercent = document.getElementById('progress-percentage');
 
-            if (!selectedSymptoms || selectedSymptoms.length === 0) {
+            // Combine manual selections with Words from the Text Box
+            let combinedSymptoms = [...selectedSymptoms];
+            if (nlpText !== "") {
+                // Split sentences into words to send to Python NLP
+                let words = nlpText.split(/\s+/);
+                combinedSymptoms = combinedSymptoms.concat(words);
+            }
+
+            if (combinedSymptoms.length === 0) {
                 errorAlert.style.display = 'flex'; resultSection.style.display = 'none'; return;
             }
             
@@ -288,27 +268,29 @@
                 if(progress > 100) progress = 100;
                 progBar.style.width = progress + '%';
                 progPercent.innerText = progress + '%';
-                if(progress === 40) progText.innerText = "Matching pattern vectors...";
-                if(progress === 80) progText.innerText = "Compiling protocol...";
+                
+                if(progress === 30) progText.innerText = "Translating text to English...";
+                if(progress === 60) progText.innerText = "Running FuzzyWuzzy Matcher...";
+                if(progress === 90) progText.innerText = "Querying ML Model...";
 
                 if(progress === 100) {
                     clearInterval(interval);
-                    fetchPredictionData(selectedSymptoms, btn, progWrapper);
+                    fetchPredictionData(combinedSymptoms, btn, progWrapper);
                 }
-            }, 150);
+            }, 180);
         }
 
-        function fetchPredictionData(selectedSymptoms, btn, progWrapper) {
+        function fetchPredictionData(combinedSymptoms, btn, progWrapper) {
             fetch('/predict', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symptoms: selectedSymptoms })
+                body: JSON.stringify({ symptoms: combinedSymptoms })
             })
             .then(response => response.json())
             .then(data => {
                 progWrapper.style.display = 'none'; btn.style.display = 'inline-flex';
                 if(data.error) {
-                    document.getElementById('error-alert').innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> System Error: ${data.error}`;
+                    document.getElementById('error-alert').innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.error}`;
                     document.getElementById('error-alert').style.display = 'flex';
                 } else {
                     document.getElementById('result-section').style.display = 'block';
@@ -322,7 +304,7 @@
                 }
             }).catch(error => {
                 progWrapper.style.display = 'none'; btn.style.display = 'inline-flex';
-                document.getElementById('error-alert').innerHTML = '<i class="fa-solid fa-plug-circle-xmark"></i> Server connection failed.';
+                document.getElementById('error-alert').innerHTML = '<i class="fa-solid fa-plug-circle-xmark"></i> Server connection failed. Check terminal.';
                 document.getElementById('error-alert').style.display = 'flex';
             });
         }

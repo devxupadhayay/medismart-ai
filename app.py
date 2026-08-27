@@ -1,59 +1,95 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template, request, jsonify
 import pickle
-import pandas as pd
 import numpy as np
+import warnings
+from deep_translator import GoogleTranslator
+from fuzzywuzzy import process
+
+warnings.filterwarnings("ignore")
 
 app = Flask(__name__)
 
-# Data aur Model Load kar rahe hain
-model = pickle.load(open('model.pkl', 'rb'))
-symptoms_list = pickle.load(open('columns.pkl', 'rb'))
-description_df = pd.read_csv('symptom_Description.csv')
-precaution_df = pd.read_csv('symptom_precaution.csv')
+# Load Machine Learning Model and Symptoms Dataset
+try:
+    model = pickle.load(open('model.pkl', 'rb'))
+    # Dhyan dein: Agar aapki symptoms list kisi aur file mein hai toh yahan update karein
+    dataset_symptoms = pickle.load(open('columns.pkl', 'rb')) 
+except Exception as e:
+    print(f"Error loading model files: {e}")
+    dataset_symptoms = []
 
-# Jab koi website open karega, toh index.html dikhega
+# --- ADVANCED NLP LAYER ---
+def process_nlp_symptoms(raw_symptoms_list):
+    """
+    Translates any language to English and fuzzy-matches with dataset symptoms
+    """
+    final_symptoms = []
+    translator = GoogleTranslator(source='auto', target='en')
+    
+    for raw_word in raw_symptoms_list:
+        # 1. Translate (Hindi/Marathi -> English)
+        try:
+            english_word = translator.translate(raw_word).lower()
+        except:
+            english_word = raw_word.lower()
+            
+        # 2. Fuzzy Matching (Smart Keyword Matching)
+        if english_word in dataset_symptoms:
+            final_symptoms.append(english_word)
+        else:
+            # Score > 70 means it's a good match
+            best_match, score = process.extractOne(english_word, dataset_symptoms)
+            if score > 70:
+                final_symptoms.append(best_match)
+                
+    # Return unique matched symptoms
+    return list(set(final_symptoms))
+
+
 @app.route('/')
 def home():
-    return render_template('index.html', symptoms=symptoms_list)
+    return render_template('index.html', symptoms=dataset_symptoms)
 
-# Yeh route JS se data lega aur prediction wapas bhejega
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.json
-    selected_symptoms = data.get('symptoms', [])
-    
-    if not selected_symptoms:
-         return jsonify({'error': 'Please select symptoms'})
-
-    # Model input ready karna
-    input_data = np.zeros(len(symptoms_list))
-    for symp in selected_symptoms:
-        if symp in symptoms_list:
-            index = symptoms_list.index(symp)
-            input_data[index] = 1
+    try:
+        data = request.get_json()
+        frontend_symptoms = data.get('symptoms', [])
+        
+        if not frontend_symptoms:
+            return jsonify({'error': 'Please provide at least one symptom.'})
             
-    # Prediction
-    prediction = model.predict([input_data])[0]
-    
-    # Description
-    desc_col = description_df.columns[1]
-    desc_val = description_df[description_df['Disease'] == prediction][desc_col].values
-    desc = desc_val[0] if len(desc_val) > 0 else "Description not available."
-    
-    # Precautions
-    prec_val = precaution_df[precaution_df['Disease'] == prediction].values
-    precautions = []
-    if len(prec_val) > 0:
-        for i in range(1, 5):
-            if pd.notna(prec_val[0][i]):
-                precautions.append(str(prec_val[0][i]).title())
+        # --- PASS THROUGH NLP LAYER ---
+        smart_symptoms = process_nlp_symptoms(frontend_symptoms)
+        
+        if not smart_symptoms:
+             return jsonify({'error': 'System could not match your words to medical terms. Please try again.'})
 
-    # JSON format mein HTML/JS ko result bhej rahe hain
-    return jsonify({
-        'disease': str(prediction).upper(),
-        'description': str(desc),
-        'precautions': precautions
-    })
+        # Feature array creation (0s and 1s)
+        input_features = [0] * len(dataset_symptoms)
+        for symptom in smart_symptoms:
+            if symptom in dataset_symptoms:
+                index = dataset_symptoms.index(symptom)
+                input_features[index] = 1
+                
+        features_array = np.array([input_features])
+        
+        # Make Prediction
+        prediction = model.predict(features_array)[0]
+        
+        disease_name = str(prediction).replace('_', ' ').title()
+        description = f"Based on our NLP analysis, the model indicates a possibility of {disease_name}. Please consult a doctor for clinical confirmation."
+        precautions = ["Rest adequately", "Stay hydrated", "Consult a certified physician"]
+
+        return jsonify({
+            'disease': disease_name,
+            'description': description,
+            'precautions': precautions
+        })
+        
+    except Exception as e:
+        print(f"Error in prediction: {e}")
+        return jsonify({'error': 'Internal Server Error. Check server logs.'})
 
 if __name__ == '__main__':
     app.run(debug=True)
