@@ -1,8 +1,5 @@
-Flask==3.0.0
-pandas
+Flask
 scikit-learn
 numpy
-gunicorn
-deep-translator==1.11.4
-fuzzywuzzy==0.18.0
-python-Levenshtein==0.23.0
+deep-translator
+fuzzywuzzy
