@@ -4,6 +4,9 @@ import numpy as np
 import warnings
 from deep_translator import GoogleTranslator
 from fuzzywuzzy import process
+from PIL import Image
+import pytesseract
+import io
 
 warnings.filterwarnings("ignore")
 app = Flask(__name__)
@@ -18,17 +21,14 @@ except Exception as e:
 
 # --- ADVANCED NLP LAYER ---
 def process_nlp_symptoms(raw_symptoms_list):
-    # Translates any language to English and fuzzy-matches with dataset symptoms
     final_symptoms = []
     translator = GoogleTranslator(source='auto', target='en')
     for raw_word in raw_symptoms_list:
-        # 1. Translate (Hindi/Marathi -> English)
         try:
             english_word = translator.translate(raw_word).lower()
         except:
             english_word = raw_word.lower()
         
-        # 2. Fuzzy Matching (Smart Keyword Matching)
         if english_word in dataset_symptoms:
             final_symptoms.append(english_word)
         else:
@@ -50,17 +50,14 @@ def predict():
         if not frontend_symptoms:
             return jsonify({'error': 'Please provide at least one symptom.'})
             
-        # PASS THROUGH NLP LAYER
         smart_symptoms = process_nlp_symptoms(frontend_symptoms)
         
         if not smart_symptoms:
             return jsonify({'error': 'System could not match your words to medical terms. Please try again.'})
         
-        # --- NEW FIX: 3 SYMPTOMS VALIDATION ---
         if len(smart_symptoms) < 3:
             return jsonify({'error': 'For an accurate AI diagnosis, please provide at least 3 symptoms (e.g., Fever, Headache, Nausea).'})
             
-        # Feature array creation (0s and 1s)
         input_features = [0] * len(dataset_symptoms)
         for symptom in smart_symptoms:
             if symptom in dataset_symptoms:
@@ -68,8 +65,6 @@ def predict():
                 input_features[index] = 1
                 
         features_array = np.array([input_features])
-        
-        # Make Prediction
         prediction = model.predict(features_array)[0]
         disease_name = str(prediction).replace('_', ' ').title()
         
@@ -85,6 +80,32 @@ def predict():
     except Exception as e:
         print(f"Error in prediction: {e}")
         return jsonify({'error': 'Internal Server Error. Check server logs.'})
+
+# --- NEW: OCR MEDICINE SCANNER ROUTE ---
+@app.route('/scan_medicine', methods=['POST'])
+def scan_medicine():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No image uploaded. Please select a photo.'})
+            
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'Empty file submitted.'})
+            
+        # Open image using Pillow
+        img = Image.open(file.stream)
+        
+        # Use Tesseract AI to extract text from the image
+        extracted_text = pytesseract.image_to_string(img)
+        clean_text = " ".join(extracted_text.split())
+        
+        if not clean_text:
+            return jsonify({'error': 'No text detected. Please upload a clearer photo of the medicine.'})
+            
+        return jsonify({'text': clean_text})
+        
+    except Exception as e:
+        return jsonify({'error': f"OCR Error: {str(e)}"})
 
 if __name__ == '__main__':
     app.run(debug=True)
