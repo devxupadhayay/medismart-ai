@@ -6,45 +6,36 @@ from deep_translator import GoogleTranslator
 from fuzzywuzzy import process
 
 warnings.filterwarnings("ignore")
-
 app = Flask(__name__)
 
 # Load Machine Learning Model and Symptoms Dataset
 try:
     model = pickle.load(open('model.pkl', 'rb'))
-    # Dhyan dein: Agar aapki symptoms list kisi aur file mein hai toh yahan update karein
-    dataset_symptoms = pickle.load(open('columns.pkl', 'rb')) 
+    dataset_symptoms = pickle.load(open('columns.pkl', 'rb'))
 except Exception as e:
     print(f"Error loading model files: {e}")
     dataset_symptoms = []
 
 # --- ADVANCED NLP LAYER ---
 def process_nlp_symptoms(raw_symptoms_list):
-    """
-    Translates any language to English and fuzzy-matches with dataset symptoms
-    """
+    # Translates any language to English and fuzzy-matches with dataset symptoms
     final_symptoms = []
     translator = GoogleTranslator(source='auto', target='en')
-    
     for raw_word in raw_symptoms_list:
         # 1. Translate (Hindi/Marathi -> English)
         try:
             english_word = translator.translate(raw_word).lower()
         except:
             english_word = raw_word.lower()
-            
+        
         # 2. Fuzzy Matching (Smart Keyword Matching)
         if english_word in dataset_symptoms:
             final_symptoms.append(english_word)
         else:
-            # Score > 70 means it's a good match
             best_match, score = process.extractOne(english_word, dataset_symptoms)
             if score > 70:
                 final_symptoms.append(best_match)
-                
-    # Return unique matched symptoms
     return list(set(final_symptoms))
-
 
 @app.route('/')
 def home():
@@ -59,12 +50,16 @@ def predict():
         if not frontend_symptoms:
             return jsonify({'error': 'Please provide at least one symptom.'})
             
-        # --- PASS THROUGH NLP LAYER ---
+        # PASS THROUGH NLP LAYER
         smart_symptoms = process_nlp_symptoms(frontend_symptoms)
         
         if not smart_symptoms:
-             return jsonify({'error': 'System could not match your words to medical terms. Please try again.'})
-
+            return jsonify({'error': 'System could not match your words to medical terms. Please try again.'})
+        
+        # --- NEW FIX: 3 SYMPTOMS VALIDATION ---
+        if len(smart_symptoms) < 3:
+            return jsonify({'error': 'For an accurate AI diagnosis, please provide at least 3 symptoms (e.g., Fever, Headache, Nausea).'})
+            
         # Feature array creation (0s and 1s)
         input_features = [0] * len(dataset_symptoms)
         for symptom in smart_symptoms:
@@ -76,11 +71,11 @@ def predict():
         
         # Make Prediction
         prediction = model.predict(features_array)[0]
-        
         disease_name = str(prediction).replace('_', ' ').title()
-        description = f"Based on our NLP analysis, the model indicates a possibility of {disease_name}. Please consult a doctor for clinical confirmation."
+        
+        description = f"Based on our NLP analysis, the model indicates a possibility of {disease_name}. Please consult a doctor."
         precautions = ["Rest adequately", "Stay hydrated", "Consult a certified physician"]
-
+        
         return jsonify({
             'disease': disease_name,
             'description': description,
