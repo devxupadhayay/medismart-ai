@@ -28,7 +28,6 @@
         .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 30px; margin-bottom: 24px; }
         .form-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; margin-top: 20px; }
         
-        /* Mic Elements Restored */
         .voice-controls { display: flex; gap: 10px; align-items: center; }
         .lang-select { border: 1px solid #99f6e4; border-radius: 8px; padding: 6px 10px; color: #0f766e; background: #f0fdfa; font-size: 0.85rem; outline: none; }
         .mic-btn { background: #f0fdfa; border: 1px solid #99f6e4; color: #0d9488; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
@@ -44,8 +43,10 @@
         .ocr-upload-box { border: 2px dashed #99f6e4; border-radius: 16px; padding: 40px; text-align: center; background: #f0fdfa; cursor: pointer; transition: all 0.2s; }
         .ocr-upload-box:hover { background: #ccfbf1; }
         .ocr-upload-box i { font-size: 2.5rem; color: #0d9488; margin-bottom: 12px; }
-        .ocr-result { display: none; background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; margin-top: 20px; }
-        .ocr-result h4 { color: #0f766e; margin-bottom: 10px; }
+        
+        .ocr-result { display: none; background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 12px; margin-top: 20px; }
+        .alt-card { background: #ffffff; border: 1px solid #e2e8f0; margin-bottom: 10px; padding: 16px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .alt-price { color: #10b981; font-weight: 800; font-size: 1.2rem; }
         
         .tab-section { display: none; }
         .tab-section.active { display: block; }
@@ -78,7 +79,6 @@
                     
                     <div class="form-label">
                         <span><i class="fa-solid fa-comment-medical"></i> Describe Symptoms</span>
-                        <!-- Mic Button is BACK! -->
                         <div class="voice-controls">
                             <select id="micLang" class="lang-select">
                                 <option value="hi-IN">हिंदी (Hindi)</option>
@@ -103,27 +103,27 @@
                 </div>
             </div>
 
-            <!-- TAB 2: MEDICINE OCR SCANNER -->
+            <!-- TAB 2: SMART MEDICINE SCANNER -->
             <div id="scanner-tab" class="tab-section">
-                <div class="dashboard-header"><h1>Medicine OCR Scanner</h1></div>
+                <div class="dashboard-header"><h1>Smart Medicine Scanner</h1></div>
                 <div class="card">
-                    <p style="margin-bottom: 20px; color: #64748b;">Upload a clear photo of your medicine strip or prescription. AI will extract the text.</p>
+                    <p style="margin-bottom: 20px; color: #64748b;">Upload a medicine strip. AI will extract the composition and suggest cheaper alternatives.</p>
                     
                     <input type="file" id="medicineImage" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
                     
                     <div class="ocr-upload-box" onclick="document.getElementById('medicineImage').click()">
                         <i class="fa-solid fa-cloud-arrow-up"></i>
                         <h3>Click to Upload Photo</h3>
-                        <p style="font-size: 0.85rem; color: #0f766e; margin-top: 8px;">Supports JPG, PNG (or open camera on mobile)</p>
+                        <p style="font-size: 0.85rem; color: #0f766e; margin-top: 8px;">Supports JPG, PNG</p>
                     </div>
 
                     <div id="ocr-loader" style="display: none; text-align: center; margin-top: 20px; color: #0d9488;">
-                        <i class="fa-solid fa-spinner fa-spin"></i> Scanning image using AI...
+                        <i class="fa-solid fa-spinner fa-spin"></i> Analyzing medical composition...
                     </div>
 
                     <div class="ocr-result" id="ocr-result-box">
-                        <h4>Extracted Text:</h4>
-                        <p id="extracted-text" style="color: #334155; font-weight: 500; font-size: 1.1rem; line-height: 1.6;"></p>
+                        <h4 style="color: #0f766e; margin-bottom: 20px;">Detected Composition: <span id="detected-comp" style="color: #064e3b; font-weight: 800;"></span></h4>
+                        <div id="alternatives-list"></div>
                     </div>
                 </div>
             </div>
@@ -144,13 +144,10 @@
             document.getElementById('top-title').innerHTML = `Dashboard / <span>${tabId === 'diagnosis' ? 'Patient Diagnosis' : 'Medicine Scanner'}</span>`;
         }
 
-        // Voice Recognition Logic Restored
         function startVoiceRecognition() {
             if (!('webkitSpeechRecognition' in window)) {
-                alert("Voice feature is not supported in this browser. Please use Google Chrome.");
-                return;
+                alert("Voice feature is not supported in this browser."); return;
             }
-
             let recognition = new webkitSpeechRecognition();
             recognition.lang = document.getElementById('micLang').value;
             let micBtn = document.getElementById('micBtn');
@@ -160,17 +157,13 @@
                 micBtn.classList.add('mic-active');
                 micBtn.innerHTML = '<i class="fa-solid fa-microphone-lines fa-fade"></i> Listening...';
             };
-
             recognition.onresult = function(event) {
-                let spokenText = event.results[0][0].transcript;
-                nlpInput.value = nlpInput.value + (nlpInput.value ? " " : "") + spokenText;
+                nlpInput.value = nlpInput.value + (nlpInput.value ? " " : "") + event.results[0][0].transcript;
             };
-
             recognition.onend = function() {
                 micBtn.classList.remove('mic-active');
                 micBtn.innerHTML = '<i class="fa-solid fa-microphone"></i> Speak';
             };
-
             recognition.start();
         }
 
@@ -195,7 +188,6 @@
             });
         }
 
-        // Updated API OCR Logic
         function handleImageUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -217,7 +209,21 @@
                     alert(data.error);
                 } else {
                     document.getElementById('ocr-result-box').style.display = 'block';
-                    document.getElementById('extracted-text').innerText = data.text;
+                    document.getElementById('detected-comp').innerText = data.composition;
+                    
+                    let altHtml = '<h5 style="color: #64748b; margin-bottom: 12px;">Suggested Alternatives:</h5>';
+                    data.alternatives.forEach(med => {
+                        altHtml += `
+                        <div class="alt-card">
+                            <div>
+                                <strong style="color: #334155;">${med.name}</strong><br>
+                                <small style="color: #64748b;">Mfr: ${med.manufacturer}</small>
+                            </div>
+                            <div class="alt-price">${med.price}</div>
+                        </div>`;
+                    });
+                    
+                    document.getElementById('alternatives-list').innerHTML = altHtml;
                 }
             })
             .catch(error => {

@@ -5,6 +5,7 @@ import warnings
 from deep_translator import GoogleTranslator
 from fuzzywuzzy import process
 import requests
+import re
 
 warnings.filterwarnings("ignore")
 app = Flask(__name__)
@@ -16,6 +17,32 @@ try:
 except Exception as e:
     print(f"Error loading model files: {e}")
     dataset_symptoms = []
+
+# --- DUMMY DATABASE FOR MEDICINE ALTERNATIVES ---
+MEDICINE_DB = {
+    "paracetamol": [
+        {"name": "Jan Aushadhi Paracetamol 500mg", "price": "₹5.00", "manufacturer": "Generic (Govt)"},
+        {"name": "Crocin 500", "price": "₹15.00", "manufacturer": "GSK"},
+        {"name": "Dolo 500", "price": "₹16.00", "manufacturer": "Micro Labs"}
+    ],
+    "amoxicillin": [
+        {"name": "Jan Aushadhi Amoxicillin 500mg", "price": "₹35.00", "manufacturer": "Generic (Govt)"},
+        {"name": "Novamox 500", "price": "₹65.00", "manufacturer": "Cipla"},
+        {"name": "Mox 500", "price": "₹70.00", "manufacturer": "Sun Pharma"}
+    ],
+    "pantoprazole": [
+        {"name": "Jan Aushadhi Pantoprazole 40mg", "price": "₹15.00", "manufacturer": "Generic (Govt)"},
+        {"name": "Pan 40", "price": "₹55.00", "manufacturer": "Alkem"},
+        {"name": "Pantosec 40", "price": "₹60.00", "manufacturer": "Cipla"}
+    ]
+}
+
+def extract_medicine_composition(ocr_text):
+    text_lower = ocr_text.lower()
+    for comp, alternatives in MEDICINE_DB.items():
+        if comp in text_lower:
+            return comp.title(), alternatives
+    return None, []
 
 # --- ADVANCED NLP LAYER ---
 def process_nlp_symptoms(raw_symptoms_list):
@@ -54,7 +81,7 @@ def predict():
             return jsonify({'error': 'System could not match your words to medical terms. Please try again.'})
         
         if len(smart_symptoms) < 3:
-            return jsonify({'error': 'For an accurate AI diagnosis, please provide at least 3 symptoms (e.g., Fever, Headache, Nausea).'})
+            return jsonify({'error': 'For an accurate AI diagnosis, please provide at least 3 symptoms.'})
             
         input_features = [0] * len(dataset_symptoms)
         for symptom in smart_symptoms:
@@ -66,20 +93,16 @@ def predict():
         prediction = model.predict(features_array)[0]
         disease_name = str(prediction).replace('_', ' ').title()
         
-        description = f"Based on our NLP analysis, the model indicates a possibility of {disease_name}. Please consult a doctor."
-        precautions = ["Rest adequately", "Stay hydrated", "Consult a certified physician"]
-        
         return jsonify({
             'disease': disease_name,
-            'description': description,
-            'precautions': precautions
+            'description': f"Based on our NLP analysis, the model indicates a possibility of {disease_name}.",
+            'precautions': ["Rest adequately", "Stay hydrated", "Consult a certified physician"]
         })
         
     except Exception as e:
-        print(f"Error in prediction: {e}")
         return jsonify({'error': 'Internal Server Error. Check server logs.'})
 
-# --- UPDATED: CLOUD OCR API SCANNER ---
+# --- SMART OCR ALTERNATIVE SCANNER ---
 @app.route('/scan_medicine', methods=['POST'])
 def scan_medicine():
     try:
@@ -87,10 +110,7 @@ def scan_medicine():
             return jsonify({'error': 'No image uploaded. Please select a photo.'})
             
         file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'Empty file submitted.'})
-            
-        # Call Free OCR API (No server installation required)
+        
         payload = {'isOverlayRequired': False, 'apikey': 'helloworld', 'language': 'eng'}
         response = requests.post('https://api.ocr.space/parse/image',
                                  files={'file': (file.filename, file.stream, file.mimetype)},
@@ -98,20 +118,21 @@ def scan_medicine():
         
         result = response.json()
         
-        if result.get('IsErroredOnProcessing'):
-            return jsonify({'error': 'API Error: Failed to process image.'})
-            
-        parsed_results = result.get('ParsedResults')
-        if not parsed_results:
+        if result.get('IsErroredOnProcessing') or not result.get('ParsedResults'):
             return jsonify({'error': 'No text detected. Please upload a clearer photo.'})
             
-        extracted_text = parsed_results[0].get('ParsedText', '').strip()
-        clean_text = " ".join(extracted_text.split())
+        extracted_text = result['ParsedResults'][0].get('ParsedText', '').strip()
         
-        if not clean_text:
-            return jsonify({'error': 'No readable text found in the image.'})
+        # Pass raw text to our smart function
+        composition, alternatives = extract_medicine_composition(extracted_text)
+        
+        if not composition:
+            return jsonify({'error': 'Could not identify a known medicine composition from the image. Try a clearer photo.'})
             
-        return jsonify({'text': clean_text})
+        return jsonify({
+            'composition': composition,
+            'alternatives': alternatives
+        })
         
     except Exception as e:
         return jsonify({'error': f"Scanner Error: {str(e)}"})
