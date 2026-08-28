@@ -13,7 +13,6 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { display: flex; height: 100vh; background-color: #f0fdfa; color: #334155; overflow: hidden; }
         
-        /* Sidebar */
         .sidebar { width: 270px; background: linear-gradient(180deg, #115e59 0%, #0f766e 100%); color: #f8fafc; display: flex; flex-direction: column; }
         .sidebar-header { padding: 28px 24px; margin-bottom: 10px; background: rgba(0,0,0,0.05); }
         .brand-name { font-size: 1.35rem; font-weight: 700; color: #ffffff; display: flex; align-items: center; gap: 10px; }
@@ -21,29 +20,33 @@
         .nav-item { padding: 14px 18px; margin-bottom: 8px; border-radius: 10px; color: #ccfbf1; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; gap: 12px; }
         .nav-item.active { background: rgba(255, 255, 255, 0.15); color: #ffffff; border-left: 4px solid #34d399; font-weight: 600; }
         
-        /* Main Content */
         .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .top-nav { background: #ffffff; padding: 18px 36px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
         .content-area { padding: 36px; overflow-y: auto; flex: 1; }
         .dashboard-header h1 { font-size: 1.75rem; font-weight: 700; color: #115e59; margin-bottom: 24px; }
         
-        /* Cards & Elements */
         .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 30px; margin-bottom: 24px; }
         .form-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; margin-top: 20px; }
+        
+        /* Mic Elements Restored */
+        .voice-controls { display: flex; gap: 10px; align-items: center; }
+        .lang-select { border: 1px solid #99f6e4; border-radius: 8px; padding: 6px 10px; color: #0f766e; background: #f0fdfa; font-size: 0.85rem; outline: none; }
+        .mic-btn { background: #f0fdfa; border: 1px solid #99f6e4; color: #0d9488; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+        .mic-btn:hover { background: #ccfbf1; }
+        .mic-active { background: #fef2f2 !important; color: #ef4444 !important; border-color: #fca5a5 !important; }
+        
         .nlp-textarea { width: 100%; border: 2px solid #e2e8f0; border-radius: 12px; padding: 12px; font-size: 0.95rem; resize: vertical; }
         .btn-primary { background: #0d9488; color: #ffffff; border: none; padding: 14px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; }
         .btn-primary:hover { background: #0f766e; }
         
         .error-msg { display: none; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 16px; border-radius: 12px; margin-bottom: 20px; font-weight: 500; }
         
-        /* OCR Scanner Styles */
         .ocr-upload-box { border: 2px dashed #99f6e4; border-radius: 16px; padding: 40px; text-align: center; background: #f0fdfa; cursor: pointer; transition: all 0.2s; }
         .ocr-upload-box:hover { background: #ccfbf1; }
         .ocr-upload-box i { font-size: 2.5rem; color: #0d9488; margin-bottom: 12px; }
         .ocr-result { display: none; background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; margin-top: 20px; }
         .ocr-result h4 { color: #0f766e; margin-bottom: 10px; }
         
-        /* Sections */
         .tab-section { display: none; }
         .tab-section.active { display: block; }
     </style>
@@ -73,7 +76,20 @@
                 <div class="card">
                     <div class="error-msg" id="error-alert"><i class="fa-solid fa-triangle-exclamation"></i> Provide at least 3 symptoms.</div>
                     
-                    <div class="form-label"><span><i class="fa-solid fa-comment-medical"></i> Describe Symptoms</span></div>
+                    <div class="form-label">
+                        <span><i class="fa-solid fa-comment-medical"></i> Describe Symptoms</span>
+                        <!-- Mic Button is BACK! -->
+                        <div class="voice-controls">
+                            <select id="micLang" class="lang-select">
+                                <option value="hi-IN">हिंदी (Hindi)</option>
+                                <option value="en-IN">English</option>
+                                <option value="mr-IN">मराठी (Marathi)</option>
+                            </select>
+                            <button class="mic-btn" id="micBtn" onclick="startVoiceRecognition()">
+                                <i class="fa-solid fa-microphone"></i> Speak
+                            </button>
+                        </div>
+                    </div>
                     <textarea id="nlpInput" class="nlp-textarea" rows="3" placeholder="E.g., Mujhe bukhar aur khasi hai..."></textarea>
 
                     <div class="form-label"><span><i class="fa-solid fa-list-check"></i> Or Select Manually</span></div>
@@ -118,7 +134,6 @@
     <script>
         $(document).ready(function() { $('#symptoms').select2(); });
 
-        // Tab Switching Logic
         function switchTab(tabId, element) {
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             element.classList.add('active');
@@ -129,7 +144,36 @@
             document.getElementById('top-title').innerHTML = `Dashboard / <span>${tabId === 'diagnosis' ? 'Patient Diagnosis' : 'Medicine Scanner'}</span>`;
         }
 
-        // Diagnosis Logic (Kept concise for space)
+        // Voice Recognition Logic Restored
+        function startVoiceRecognition() {
+            if (!('webkitSpeechRecognition' in window)) {
+                alert("Voice feature is not supported in this browser. Please use Google Chrome.");
+                return;
+            }
+
+            let recognition = new webkitSpeechRecognition();
+            recognition.lang = document.getElementById('micLang').value;
+            let micBtn = document.getElementById('micBtn');
+            let nlpInput = document.getElementById('nlpInput');
+
+            recognition.onstart = function() {
+                micBtn.classList.add('mic-active');
+                micBtn.innerHTML = '<i class="fa-solid fa-microphone-lines fa-fade"></i> Listening...';
+            };
+
+            recognition.onresult = function(event) {
+                let spokenText = event.results[0][0].transcript;
+                nlpInput.value = nlpInput.value + (nlpInput.value ? " " : "") + spokenText;
+            };
+
+            recognition.onend = function() {
+                micBtn.classList.remove('mic-active');
+                micBtn.innerHTML = '<i class="fa-solid fa-microphone"></i> Speak';
+            };
+
+            recognition.start();
+        }
+
         function runDiagnostics() {
             let selectedSymptoms = $('#symptoms').val() || [];
             let nlpText = document.getElementById('nlpInput').value.trim();
@@ -140,6 +184,7 @@
                 document.getElementById('error-alert').style.display = 'block'; return;
             }
             
+            document.getElementById('error-alert').style.display = 'none';
             fetch('/predict', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -150,7 +195,7 @@
             });
         }
 
-        // OCR Scanner Logic
+        // Updated API OCR Logic
         function handleImageUpload(event) {
             const file = event.target.files[0];
             if (!file) return;

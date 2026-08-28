@@ -4,9 +4,7 @@ import numpy as np
 import warnings
 from deep_translator import GoogleTranslator
 from fuzzywuzzy import process
-from PIL import Image
-import pytesseract
-import io
+import requests
 
 warnings.filterwarnings("ignore")
 app = Flask(__name__)
@@ -81,7 +79,7 @@ def predict():
         print(f"Error in prediction: {e}")
         return jsonify({'error': 'Internal Server Error. Check server logs.'})
 
-# --- NEW: OCR MEDICINE SCANNER ROUTE ---
+# --- UPDATED: CLOUD OCR API SCANNER ---
 @app.route('/scan_medicine', methods=['POST'])
 def scan_medicine():
     try:
@@ -92,20 +90,31 @@ def scan_medicine():
         if file.filename == '':
             return jsonify({'error': 'Empty file submitted.'})
             
-        # Open image using Pillow
-        img = Image.open(file.stream)
+        # Call Free OCR API (No server installation required)
+        payload = {'isOverlayRequired': False, 'apikey': 'helloworld', 'language': 'eng'}
+        response = requests.post('https://api.ocr.space/parse/image',
+                                 files={'file': (file.filename, file.stream, file.mimetype)},
+                                 data=payload)
         
-        # Use Tesseract AI to extract text from the image
-        extracted_text = pytesseract.image_to_string(img)
+        result = response.json()
+        
+        if result.get('IsErroredOnProcessing'):
+            return jsonify({'error': 'API Error: Failed to process image.'})
+            
+        parsed_results = result.get('ParsedResults')
+        if not parsed_results:
+            return jsonify({'error': 'No text detected. Please upload a clearer photo.'})
+            
+        extracted_text = parsed_results[0].get('ParsedText', '').strip()
         clean_text = " ".join(extracted_text.split())
         
         if not clean_text:
-            return jsonify({'error': 'No text detected. Please upload a clearer photo of the medicine.'})
+            return jsonify({'error': 'No readable text found in the image.'})
             
         return jsonify({'text': clean_text})
         
     except Exception as e:
-        return jsonify({'error': f"OCR Error: {str(e)}"})
+        return jsonify({'error': f"Scanner Error: {str(e)}"})
 
 if __name__ == '__main__':
     app.run(debug=True)
