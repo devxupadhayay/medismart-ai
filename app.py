@@ -37,11 +37,24 @@ MEDICINE_DB = {
     ]
 }
 
+# --- SMART OCR MATCHER (FUZZY LOGIC ADDED) ---
 def extract_medicine_composition(ocr_text):
     text_lower = ocr_text.lower()
-    for comp, alternatives in MEDICINE_DB.items():
+    db_keys = list(MEDICINE_DB.keys())
+    
+    # 1. Check for Exact Match First
+    for comp in db_keys:
         if comp in text_lower:
-            return comp.title(), alternatives
+            return comp.title(), MEDICINE_DB[comp]
+            
+    # 2. Fuzzy Match (Agar OCR ne spelling mistake ki ho jaise 'procetamol')
+    words = text_lower.split()
+    for word in words:
+        if len(word) > 4: # Ignore small garbage words
+            best_match, score = process.extractOne(word, db_keys)
+            if score >= 75:  # 75% match threshold
+                return best_match.title(), MEDICINE_DB[best_match]
+                
     return None, []
 
 # --- ADVANCED NLP LAYER ---
@@ -102,7 +115,7 @@ def predict():
     except Exception as e:
         return jsonify({'error': 'Internal Server Error. Check server logs.'})
 
-# --- SMART OCR ALTERNATIVE SCANNER ---
+# --- CLOUD OCR SCANNER ---
 @app.route('/scan_medicine', methods=['POST'])
 def scan_medicine():
     try:
@@ -123,7 +136,7 @@ def scan_medicine():
             
         extracted_text = result['ParsedResults'][0].get('ParsedText', '').strip()
         
-        # Pass raw text to our smart function
+        # Pass raw messy text to our Smart Fuzzy Function
         composition, alternatives = extract_medicine_composition(extracted_text)
         
         if not composition:
