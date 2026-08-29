@@ -4,17 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MediSmart AI | Clinical Intelligence Suite</title>
-    <!-- Fonts & CDNs -->
-    <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
-    <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
-    <link href="[https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap](https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap)" rel="stylesheet">
-    <link rel="stylesheet" href="[https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css](https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css)">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Select2 & jQuery -->
-    <script src="[https://code.jquery.com/jquery-3.6.0.min.js](https://code.jquery.com/jquery-3.6.0.min.js)"></script>
-    <link href="[https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css](https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css)" rel="stylesheet" />
-    <script src="[https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js](https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js)"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <!-- OCR Engine -->
-    <script src="[https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js](https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js)"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     
     <style>
         :root {
@@ -31,18 +30,22 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
         body { display: flex; height: 100vh; background: var(--surface-bg); color: var(--text-main); overflow: hidden; }
 
+        /* Direct SVG Icons Styling */
+        .svg-icon { display: inline-block; width: 22px; height: 22px; stroke-width: 0; stroke: currentColor; fill: currentColor; vertical-align: middle; }
+        .svg-icon-lg { width: 30px; height: 30px; }
+
         /* Sidebar Styling */
         .sidebar { width: 280px; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; border-right: 1px solid rgba(255, 255, 255, 0.06); flex-shrink: 0; }
         .sidebar-header { padding: 28px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
         .brand-name { font-size: 1.35rem; font-weight: 800; color: #ffffff; display: flex; align-items: center; gap: 12px; letter-spacing: -0.5px; }
-        .brand-icon-box { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #ffffff; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35); flex-shrink: 0; }
+        .brand-icon-box { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); display: flex; align-items: center; justify-content: center; color: #ffffff; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35); flex-shrink: 0; }
         .brand-subtitle { font-size: 0.72rem; color: #94a3b8; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
         
         .nav-menu { padding: 20px 16px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
         .nav-item { padding: 13px 18px; border-radius: 12px; color: #94a3b8; font-size: 0.92rem; display: flex; align-items: center; gap: 12px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
         .nav-item:hover { background: rgba(255, 255, 255, 0.04); color: #ffffff; }
         .nav-item.active { background: #1e293b; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.1); }
-        .nav-item.active i { color: #818cf8; }
+        .nav-item.active .svg-icon { fill: #818cf8; }
 
         /* Main Workspace */
         .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -56,12 +59,13 @@
         .dashboard-header h1 { font-size: 1.85rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.5px; }
         .dashboard-header p { color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; }
 
-        /* Mode Cards Grid (High Density SVGs & Icons) */
-        .modes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; }
-        .mode-card { background: #ffffff; border: 1px solid var(--border); border-radius: 18px; padding: 36px 30px; cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; align-items: flex-start; box-shadow: 0 4px 14px rgba(0,0,0,0.02); }
+        /* Mode Cards Grid (Fixed High-Resolution SVGs) */
+        .modes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; width: 100%; max-width: 1200px; }
+        .mode-card { background: #ffffff; border: 1.5px solid var(--border); border-radius: 18px; padding: 36px 30px; cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; align-items: flex-start; box-shadow: 0 4px 14px rgba(0,0,0,0.02); }
         .mode-card:hover { border-color: var(--primary); transform: translateY(-3px); box-shadow: 0 14px 28px -5px rgba(67, 56, 202, 0.12); }
         
-        .mode-icon-box { width: 62px; height: 62px; border-radius: 16px; background: #eef2ff; border: 1.5px solid #c7d2fe; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; color: var(--primary); margin-bottom: 22px; flex-shrink: 0; }
+        .mode-icon-box { width: 64px; height: 64px; border-radius: 16px; background: #eef2ff; border: 1.5px solid #c7d2fe; display: flex; align-items: center; justify-content: center; color: var(--primary); margin-bottom: 22px; flex-shrink: 0; }
+        .mode-icon-box svg { width: 32px; height: 32px; fill: var(--primary); }
         .mode-card h3 { font-size: 1.3rem; font-weight: 800; color: var(--text-main); margin-bottom: 8px; }
         .mode-card p { font-size: 0.92rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 22px; flex: 1; }
         .mode-btn-tag { color: var(--primary); font-weight: 700; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 8px; }
@@ -125,11 +129,11 @@
 
         .dropzone { border: 2px dashed #cbd5e1; background: #f8fafc; border-radius: 16px; padding: 40px 20px; text-align: center; cursor: pointer; transition: 0.2s; }
         .dropzone:hover { background: #eef2ff; border-color: var(--primary); }
-        .dropzone i { font-size: 3rem; color: var(--primary); margin-bottom: 12px; }
+        .dropzone svg { width: 48px; height: 48px; fill: var(--primary); margin-bottom: 12px; }
         #preview-img { max-height: 190px; max-width: 100%; border-radius: 12px; margin-top: 14px; display: none; margin-left: auto; margin-right: auto; }
 
         .generic-card { background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 16px; padding: 22px 26px; margin-bottom: 22px; display: flex; align-items: flex-start; gap: 16px; }
-        .generic-icon { color: #059669; font-size: 1.7rem; flex-shrink: 0; }
+        .generic-icon svg { width: 32px; height: 32px; fill: #059669; flex-shrink: 0; }
         .generic-content h3 { font-size: 1.15rem; color: #065f46; font-weight: 800; }
         .generic-content p { font-size: 0.95rem; color: #047857; margin-top: 4px; }
 
@@ -148,17 +152,19 @@
     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="brand-name">
-                <div class="brand-icon-box"><i class="fa-solid fa-staff-snake"></i></div>
+                <div class="brand-icon-box">
+                    <svg viewBox="0 0 24 24" class="svg-icon"><path d="M19 10.5V8.8C19 6.7 17.3 5 15.2 5H8.8C6.7 5 5 6.7 5 8.8v6.4C5 17.3 6.7 19 8.8 19h6.4c2.1 0 3.8-1.7 3.8-3.8v-1.7h2v-3h-2zm-6 4.5h-2v-2H9v-2h2V9h2v2h2v2h-2v2z"/></svg>
+                </div>
                 MediSmart
             </div>
-            <div class="brand-subtitle">Clinical Intelligence Platform</div>
+            <div class="brand-subtitle">Clinical Platform</div>
         </div>
         <div class="nav-menu">
             <div class="nav-item active" id="tab-btn-diagnosis" onclick="showDiagnosisHub()">
-                <i class="fa-solid fa-stethoscope"></i> Patient Diagnosis
+                <svg viewBox="0 0 24 24" class="svg-icon"><path d="M19 8h-2V6c0-1.1-.9-2-2-2H9c-1.1 0-2 .9-2 2v2H5c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6h6v2H9V6zm10 14H5V10h14v10zm-8-3h2v2h-2v-2zm0-4h2v2h-2v-2z"/></svg> Patient Diagnosis
             </div>
             <div class="nav-item" id="tab-btn-scanner" onclick="showScannerTab()">
-                <i class="fa-solid fa-camera-retro"></i> Medicine Scanner
+                <svg viewBox="0 0 24 24" class="svg-icon"><path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></svg> Medicine Scanner
             </div>
         </div>
     </aside>
@@ -166,7 +172,7 @@
     <main class="main-content">
         <header class="top-nav">
             <div class="page-path">Workspace / <span id="nav-title">Patient Diagnosis</span></div>
-            <div class="status-pill"><i class="fa-solid fa-circle-check"></i> Hybrid ML + Gemini Engine Ready</div>
+            <div class="status-pill">● System Online</div>
         </header>
 
         <div class="content-area">
@@ -180,36 +186,38 @@
                 <div class="modes-grid">
                     <div class="mode-card" onclick="openDiagnosisMode('chat')">
                         <div class="mode-icon-box">
-                            <i class="fa-solid fa-comment-medical"></i>
+                            <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 9h-3v3h-2v-3H8V9h5V6h2v3h3v2z"/></svg>
                         </div>
                         <h3>AI Medical Chatbot</h3>
                         <p>Describe your health concerns naturally using conversational voice input or text in Hindi, Marathi, or English.</p>
-                        <div class="mode-btn-tag">Launch Assistant <i class="fa-solid fa-arrow-right"></i></div>
+                        <div class="mode-btn-tag">Launch Assistant →</div>
                     </div>
 
                     <div class="mode-card" onclick="openDiagnosisMode('manual')">
                         <div class="mode-icon-box">
-                            <i class="fa-solid fa-list-check"></i>
+                            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                         </div>
                         <h3>Manual Symptom Selector</h3>
                         <p>Search and select verified medical symptoms directly from our clinical taxonomy checklist.</p>
-                        <div class="mode-btn-tag">Open Checklist <i class="fa-solid fa-arrow-right"></i></div>
+                        <div class="mode-btn-tag">Open Checklist →</div>
                     </div>
                 </div>
             </section>
 
             <!-- CHATBOT VIEW -->
             <section id="section-diagnosis-chat" class="tab-section">
-                <button class="back-nav-btn" onclick="showDiagnosisHub()"><i class="fa-solid fa-arrow-left"></i> Back to Diagnosis Options</button>
+                <button class="back-nav-btn" onclick="showDiagnosisHub()">← Back to Diagnosis Options</button>
                 <div class="dashboard-header" style="margin-bottom: 14px;">
                     <h1>AI Medical Chatbot</h1>
-                    <p>Speak or type your symptoms freely. Powered by Google Gemini & Clinical ML.</p>
+                    <p>Speak or type your symptoms freely. Parsed with local triage safeguard engine.</p>
                 </div>
 
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
                         <div class="chat-msg bot">
-                            <div class="msg-avatar"><i class="fa-solid fa-user-doctor"></i></div>
+                            <div class="msg-avatar">
+                                <svg viewBox="0 0 24 24" class="svg-icon"><path d="M12 2a5 5 0 1 0 5 5 5 5 0 0 0-5-5zm0 8a3 3 0 1 1 3-3 3 3 0 0 1-3 3zm9 11v-1a7 7 0 0 0-14 0v1z"/></svg>
+                            </div>
                             <div class="msg-bubble">
                                 Namaste! Main aapka MediSmart AI Assistant hoon. Aapko kya takleef mehsoos ho rahi hai? (e.g., <i>"Mujhe bukhar aur sardi hai"</i>)
                             </div>
@@ -221,34 +229,36 @@
                             <option value="hi-IN">हिंदी (Hindi)</option>
                             <option value="en-IN">English</option>
                         </select>
-                        <button class="btn-mic" id="micBtn" onclick="toggleVoiceRecognition()" title="Voice Input"><i class="fa-solid fa-microphone"></i></button>
+                        <button class="btn-mic" id="micBtn" onclick="toggleVoiceRecognition()" title="Voice Input">
+                            <svg viewBox="0 0 24 24" class="svg-icon"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.38-1.14-1-1.14z"/></svg>
+                        </button>
                         <input type="text" id="userInput" class="chat-input" placeholder="Type your symptoms here or tap the mic..." onkeypress="handleKeyPress(event)">
-                        <button class="btn-action" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i> Send</button>
+                        <button class="btn-action" onclick="sendChatMessage()">Send →</button>
                     </div>
                 </div>
             </section>
 
             <!-- MANUAL CHECKLIST VIEW -->
             <section id="section-diagnosis-manual" class="tab-section">
-                <button class="back-nav-btn" onclick="showDiagnosisHub()"><i class="fa-solid fa-arrow-left"></i> Back to Diagnosis Options</button>
+                <button class="back-nav-btn" onclick="showDiagnosisHub()">← Back to Diagnosis Options</button>
                 <div class="dashboard-header">
                     <h1>Manual Symptom Selector</h1>
                     <p>Select observed symptoms directly from the clinical taxonomy to run diagnostics.</p>
                 </div>
 
                 <div class="card">
-                    <label style="font-weight:700; margin-bottom:12px; display:block;"><i class="fa-solid fa-notes-medical" style="color:var(--primary)"></i> Observed Symptoms Checklist</label>
+                    <label style="font-weight:700; margin-bottom:12px; display:block;">Observed Symptoms Checklist</label>
                     <select id="symptomsSelectManual" multiple="multiple" style="width: 100%;">
                         {% for symp in symptoms %}
                         <option value="{{ symp }}">{{ symp | replace('_', ' ') | title }}</option>
                         {% endfor %}
                     </select>
-                    <button class="btn-primary" onclick="runManualDiagnostics()"><i class="fa-solid fa-microchip"></i> Run Clinical Evaluation</button>
+                    <button class="btn-primary" onclick="runManualDiagnostics()">Run Clinical Evaluation</button>
                 </div>
 
                 <div id="result-manual" class="result-box">
                     <div class="alert-success">
-                        <div class="alert-icon"><i class="fa-solid fa-shield-heart"></i></div>
+                        <div class="alert-icon">✓</div>
                         <div class="alert-content">
                             <h4>Predicted Clinical Condition</h4>
                             <h2 id="manual-disease-name">Disease Name</h2>
@@ -256,11 +266,11 @@
                     </div>
                     <div class="data-grid">
                         <div class="data-card">
-                            <div class="data-card-header"><i class="fa-solid fa-file-waveform"></i> Medical Overview</div>
+                            <div class="data-card-header">Medical Overview</div>
                             <div class="data-card-body" id="manual-description-text"></div>
                         </div>
                         <div class="data-card">
-                            <div class="data-card-header"><i class="fa-solid fa-hand-holding-medical"></i> Suggested Precautions</div>
+                            <div class="data-card-header">Suggested Precautions</div>
                             <div class="data-card-body"><ul id="manual-precautions-list"></ul></div>
                         </div>
                     </div>
@@ -277,17 +287,17 @@
                 <div class="card">
                     <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="processMedicineImage(event)">
                     <div class="dropzone" onclick="document.getElementById('imageInput').click()">
-                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
                         <h3 style="font-weight:800;">Click to Upload Strip Photo</h3>
                         <p style="color:var(--text-muted); font-size:0.88rem; margin-top:4px;">Supports JPG, PNG</p>
                         <img id="preview-img" alt="Preview">
                     </div>
-                    <div id="scanner-status" style="margin-top:16px; font-weight:700; color:var(--primary); display:none;"><i class="fa-solid fa-circle-notch fa-spin"></i> Scanning text from image...</div>
+                    <div id="scanner-status" style="margin-top:16px; font-weight:700; color:var(--primary); display:none;">Scanning text from image...</div>
                 </div>
 
                 <div id="result-scanner" class="result-box">
                     <div class="alert-success">
-                        <div class="alert-icon"><i class="fa-solid fa-capsules"></i></div>
+                        <div class="alert-icon">Rx</div>
                         <div class="alert-content">
                             <h4>Scanned Medicine Brand</h4>
                             <h2 id="medicine-title">Medicine Name</h2>
@@ -295,7 +305,9 @@
                     </div>
 
                     <div class="generic-card">
-                        <div class="generic-icon"><i class="fa-solid fa-building-ngo"></i></div>
+                        <div class="generic-icon">
+                            <svg viewBox="0 0 24 24" class="svg-icon"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        </div>
                         <div class="generic-content">
                             <h3>Generic Equivalent / Alternative</h3>
                             <p id="generic-text">Loading...</p>
@@ -304,17 +316,17 @@
 
                     <div class="data-grid">
                         <div class="data-card">
-                            <div class="data-card-header"><i class="fa-solid fa-flask-vial"></i> Active Salt Composition</div>
+                            <div class="data-card-header">Active Salt Composition</div>
                             <div class="data-card-body" id="composition-text"></div>
                         </div>
                         <div class="data-card">
-                            <div class="data-card-header"><i class="fa-solid fa-hand-holding-medical"></i> Primary Uses</div>
+                            <div class="data-card-header">Primary Uses</div>
                             <div class="data-card-body" id="usage-text"></div>
                         </div>
                     </div>
 
                     <div class="data-card" style="margin-top: 22px; border-left: 4px solid var(--primary);">
-                        <div class="data-card-header"><i class="fa-solid fa-shield-halved"></i> Dosage Advice & Precautions</div>
+                        <div class="data-card-header">Dosage Advice & Precautions</div>
                         <div class="data-card-body" id="safety-text" style="font-weight:600;"></div>
                     </div>
                 </div>
@@ -362,13 +374,13 @@
             const chatMessages = document.getElementById('chatMessages');
             const msgDiv = document.createElement('div');
             msgDiv.className = `chat-msg ${sender}`;
-            const avatarIcon = sender === 'bot' ? 'fa-user-doctor' : 'fa-user';
+            const avatarSvg = sender === 'bot' ? '<svg viewBox="0 0 24 24" class="svg-icon"><path d="M12 2a5 5 0 1 0 5 5 5 5 0 0 0-5-5zm0 8a3 3 0 1 1 3-3 3 3 0 0 1-3 3zm9 11v-1a7 7 0 0 0-14 0v1z"/></svg>' : '<svg viewBox="0 0 24 24" class="svg-icon"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
             
             let bubbleContent = text;
             if (htmlContent) bubbleContent += htmlContent;
 
             msgDiv.innerHTML = `
-                <div class="msg-avatar"><i class="fa-solid ${avatarIcon}"></i></div>
+                <div class="msg-avatar">${avatarSvg}</div>
                 <div class="msg-bubble">${bubbleContent}</div>
             `;
             chatMessages.appendChild(msgDiv);
@@ -384,7 +396,7 @@
             appendMessage('user', text);
             if (!overrideText) input.value = '';
 
-            appendMessage('bot', '<i class="fa-solid fa-circle-notch fa-spin"></i> Evaluating symptoms with MediSmart Engine...');
+            appendMessage('bot', 'Evaluating symptoms...');
             const loadingMsg = document.querySelector('#chatMessages .chat-msg.bot:last-child');
 
             fetch('/predict', {
@@ -404,7 +416,7 @@
                     let precItems = data.precautions.map(p => `<li>${p}</li>`).join('');
                     let diagHtml = `
                         <div class="diag-card">
-                            <div class="diag-title"><i class="fa-solid fa-notes-medical"></i> ${data.disease}</div>
+                            <div class="diag-title">● ${data.disease}</div>
                             ${data.conversational_overview ? `<div class="diag-desc" style="font-weight:700; color:var(--primary); margin-bottom:8px;">${data.conversational_overview}</div>` : ''}
                             <div class="diag-desc">${data.description}</div>
                             <div class="diag-prec-title">Suggested Precautions:</div>
