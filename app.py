@@ -124,6 +124,7 @@ def scan_medicine():
             
         file = request.files['file']
         
+        # Call Free OCR API
         payload = {'isOverlayRequired': False, 'apikey': 'helloworld', 'language': 'eng'}
         response = requests.post('https://api.ocr.space/parse/image',
                                  files={'file': (file.filename, file.stream, file.mimetype)},
