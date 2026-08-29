@@ -5,46 +5,46 @@ import pandas as pd
 import warnings
 import json
 import os
-from deep_translator import GoogleTranslator
-from fuzzywuzzy import process, fuzz
+import google.generativeai as genai
+from dotenv import load_dotenv
+from fuzzywuzzy import fuzz, process
 
 warnings.filterwarnings("ignore")
+load_dotenv()
 
 app = Flask(__name__)
 
-# --- 1. Load ML Model & Datasets ---
+# --- 1. Load ML Model & Reference Datasets ---
 try:
     model = pickle.load(open('model.pkl', 'rb'))
     dataset_symptoms = pickle.load(open('columns.pkl', 'rb'))
+    verified_symptoms_list = [s.replace('_', ' ').strip().lower() for s in dataset_symptoms]
 except Exception as e:
     print(f"Model loading error: {e}")
     dataset_symptoms = []
+    verified_symptoms_list = []
 
 try:
     description_df = pd.read_csv('symptom_Description.csv')
     precaution_df = pd.read_csv('symptom_precaution.csv')
 except Exception as e:
-    print(f"CSV loading error: {e}")
     description_df = pd.DataFrame()
     precaution_df = pd.DataFrame()
 
-# --- 2. Dynamic JSON Symptoms Dictionary Loader ---
-LOCAL_TERM_MAP = {}
-if os.path.exists('symptoms_map.json'):
-    try:
-        with open('symptoms_map.json', 'r', encoding='utf-8') as f:
-            LOCAL_TERM_MAP = json.load(f)
-    except Exception as e:
-        print(f"JSON Load error: {e}")
-
-# Fallback basic terms if json missing
-if not LOCAL_TERM_MAP:
-    LOCAL_TERM_MAP = {
-        "bukhar": "high_fever", "बुखार": "high_fever", "fever": "high_fever",
-        "sirdard": "headache", "सर दर्द": "headache", "headache": "headache",
-        "sardi": "cold", "सर्दी": "cold", "khasi": "cough", "खांसी": "cough",
-        "ulti": "vomiting", "dast": "diarrhoea", "thakan": "fatigue"
-    }
+# --- 2. Configure Google Gemini Brain ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model_gemini = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        generation_config={
+            "temperature": 0.2,
+            "response_mime_type": "application/json"
+        }
+    )
+else:
+    model_gemini = None
+    print("Warning: GEMINI_API_KEY not found in .env. Running fallback NLP.")
 
 # --- 3. Medicine Knowledge Base ---
 MEDICINE_DATABASE = {
@@ -106,36 +106,36 @@ MEDICINE_DATABASE = {
     }
 }
 
-# --- 4. NLP Symptom Extractor ---
-def process_nlp_symptoms(raw_symptoms_list):
-    extracted_tags = []
-    combined_text = " ".join([str(s) for s in raw_symptoms_list]).lower()
+# --- 4. Gemini Triage Engine ---
+def extract_with_gemini(raw_text):
+    if not model_gemini:
+        return {"triage_action": "RUN_MODEL", "extracted_symptoms": raw_text.lower().split(), "bot_response": "Processed via backup engine."}
     
-    # 1. Match from Local/JSON Map
-    for phrase, tag in LOCAL_TERM_MAP.items():
-        if phrase in combined_text:
-            extracted_tags.append(tag)
-            
-    # 2. Translation layer
+    prompt = f"""
+    You are MediSmart, a multi-lingual medical triage assistant.
+    Analyze user text in Hindi, Hinglish, Marathi, or English.
+
+    RULES:
+    1. If user input is a single non-specific symptom (e.g., only "bukhar" or "sir dard"), set "triage_action": "FOLLOW_UP", give a preliminary condition name (e.g., "Viral Pyrexia"), a friendly 1-sentence Hindi/Hinglish response in "bot_response", and 4 common follow-up symptom options in "follow_up_symptoms".
+    2. If multiple symptoms exist (e.g., "bukhar aur sardi"), match them against the clinical list, set "triage_action": "RUN_MODEL", and provide a 1-sentence Hindi/Hinglish overview in "bot_response".
+    3. Return JSON ONLY with keys:
+       - "triage_action": "FOLLOW_UP" or "RUN_MODEL"
+       - "disease_candidate": string or null
+       - "bot_response": string
+       - "follow_up_symptoms": list of strings (if follow up)
+       - "extracted_symptoms": list of strings matched with dataset
+
+    VERIFIED DATASET SYMPTOMS LIST:
+    {', '.join(verified_symptoms_list[:60])}
+    """
     try:
-        translated = GoogleTranslator(source='auto', target='en').translate(combined_text).lower()
-    except:
-        translated = combined_text
-        
-    for phrase, tag in LOCAL_TERM_MAP.items():
-        if phrase in translated:
-            extracted_tags.append(tag)
-            
-    # 3. Direct match with dataset features
-    for symp in dataset_symptoms:
-        clean_name = symp.replace('_', ' ').lower()
-        if clean_name in translated or clean_name in combined_text:
-            extracted_tags.append(symp)
-            
-    return list(set(extracted_tags)), combined_text
+        response = model_gemini.generate_content(prompt + f"\n\nUser Input: {raw_text}")
+        return json.loads(response.text)
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return {"triage_action": "RUN_MODEL", "extracted_symptoms": raw_text.lower().split(), "bot_response": "Pattern analyzed."}
 
-# --- 5. App Routes ---
-
+# --- 5. Application Routes ---
 @app.route('/')
 def home():
     return render_template('index.html', symptoms=dataset_symptoms)
@@ -144,130 +144,83 @@ def home():
 def predict():
     try:
         data = request.get_json() or {}
-        frontend_symptoms = data.get('symptoms', [])
         
-        if not frontend_symptoms:
-            return jsonify({'error': 'Kripya kam se kam ek symptom likhein ya select karein.'})
-            
-        smart_symptoms, raw_user_text = process_nlp_symptoms(frontend_symptoms)
-        
-        # --- A. CLINICAL CLUSTER TRIAGE LAYER ---
-        has_fever = any(s in smart_symptoms for s in ['high_fever', 'mild_fever']) or any(w in raw_user_text for w in ['bukhar', 'बुखार', 'fever', 'tap'])
-        has_cold = any(s in smart_symptoms for s in ['cold', 'cough', 'continuous_sneezing', 'throat_irritation', 'runny_nose']) or any(w in raw_user_text for w in ['sardi', 'सर्दी', 'khasi', 'cold', 'jukham'])
-        has_headache = 'headache' in smart_symptoms or any(w in raw_user_text for w in ['sirdard', 'सर दर्द', 'headache'])
-        has_loose_motion = any(s in smart_symptoms for s in ['diarrhoea', 'vomiting', 'stomach_pain']) or any(w in raw_user_text for w in ['dast', 'loose motion', 'ulti', 'pet kharab'])
+        # Check if call comes from manual selector array or chatbot text string
+        if 'symptoms' in data and isinstance(data['symptoms'], list):
+            raw_symptoms_list = data['symptoms']
+            user_text = " ".join(raw_symptoms_list)
+        else:
+            user_text = data.get('symptoms_text', '').strip()
 
-        # Case 1: Fever + Cold/Cough
-        if has_fever and has_cold:
+        if not user_text:
+            return jsonify({'error': 'Kripya apne lakshan likhein ya select karein.'})
+
+        # --- A. Gemini Analysis ---
+        triage_data = extract_with_gemini(user_text)
+
+        # Handle Single Symptom Follow-Up
+        if triage_data.get("triage_action") == "FOLLOW_UP":
             return jsonify({
-                'disease': 'Seasonal Influenza / Common Viral Flu',
-                'description': 'Bukhar ke sath sardi, khasi aur gale me kharash aam viral respiratory infection (Flu) ke lakshan hain. Yeh mausam badalne par 3 se 5 din tak rehta hai.',
-                'precautions': [
-                    'Paracetamol (500mg) for fever and body temperature control',
-                    'Steam inhalation (Bhaap lein) aur gungune paani se namak daal kar gargle karein',
-                    'Garm paani, soup aur liquid fluids zyada matra me lein',
-                    'Agar bukhar 102°F se upar jaye ya 4 din se zyada rahe toh doctor se milen'
-                ]
+                'disease': triage_data.get('disease_candidate', 'Viral Pyrexia (Viral Fever)'),
+                'is_single': True,
+                'conversational_overview': triage_data.get('bot_response', 'Aapko bukhar ke sath aur kya pareshani hai?'),
+                'follow_up_options': triage_data.get('follow_up_symptoms', ['Sardi / Khasi', 'Sir Dard', 'Thand Lagna', 'Kamzori']),
+                'description': 'Sirf ek lakshan aam viral ya seasonal infection ka sanket hai. Specific bimari ke liye follow-up lakshan chunein.',
+                'precautions': ['Pani aur ORS ka sevan badhayein', 'Paryapt aaram karein', '3 din se zyada takleef par doctor se milen']
             })
 
-        # Case 2: Fever + Headache
-        if has_fever and has_headache:
-            return jsonify({
-                'disease': 'Acute Viral Pyrexia with Cephalea',
-                'description': 'Bukhar ke sath sir dard aam taur par viral infection, dehydration ya sharir me thakan ki wajah se hota hai.',
-                'precautions': [
-                    'Paracetamol for fever relief and rest in a calm room',
-                    'ORS / Nariyal paani aur dehydration se bachein',
-                    'Mobile aur laptop screen time se parhez karein',
-                    'Agar ulti ya chakkar aayein toh doctor se blood test karwayein'
-                ]
-            })
+        # --- B. Multi-Symptom Processing with ML Model ---
+        extracted = triage_data.get('extracted_symptoms', [])
+        if not extracted:
+            extracted = user_text.lower().replace(',', ' ').split()
 
-        # Case 3: Loose motion / Vomiting
-        if has_loose_motion:
-            return jsonify({
-                'disease': 'Acute Gastroenteritis (Stomach Infection)',
-                'description': 'Dast, ulti ya pet dard aam taur par contaminated food ya paani se hone wale bacterial/viral infection ke sanket hain.',
-                'precautions': [
-                    'ORS (Oral Rehydration Solution) har dast ke baad piyein',
-                    'Khane me dahi, khichdi aur kela jaise halki cheezein lein',
-                    'Tali-bhuni aur bahar ki cheezon se bilkul parhez karein',
-                    'Dehydration na hone dein aur doctor se consultation lein'
-                ]
-            })
-
-        # Case 4: Single Symptom Isolated
-        if len(smart_symptoms) <= 1:
-            if has_fever:
-                return jsonify({
-                    'disease': 'Viral Pyrexia (Acute Viral Fever)',
-                    'is_single': True,
-                    'identified_symptom': 'Bukhar (Fever)',
-                    'follow_up_question': 'Aapko bukhar ke sath inme se aur kya takleef hai?',
-                    'follow_up_options': ['Sardi / Khasi (Cold/Cough)', 'Sir dard (Headache)', 'Thand lagna (Chills)', 'Ulti / Dast (Vomiting)'],
-                    'description': 'Sirf bukhar aana aam viral infection ya seasonal change ka sanket hai.',
-                    'precautions': [
-                        'Paracetamol (500mg) as advised for fever',
-                        'Pani aur ORS ka sevan badhayein',
-                        'Gili patti (Cold compress) lagayein agar bukhar tez ho',
-                        'Doctor se consult karein'
-                    ]
-                })
-            elif has_cold:
-                return jsonify({
-                    'disease': 'Upper Respiratory Irritation / Common Cold',
-                    'description': 'Sardi, khasi ya chhinke aana aam allergy ya viral common cold ka sanket hai.',
-                    'precautions': [
-                        'Steam inhalation (Bhaap lein)',
-                        'Gunguna paani piyein aur thandi cheezon se parhez karein',
-                        'Antihistamine (jaise Cetirizine 10mg) raat ko le sakte hain'
-                    ]
-                })
-            elif has_headache:
-                return jsonify({
-                    'disease': 'Tension Headache / Migraine Strain',
-                    'description': 'Akela sir dard neend ki kami, screen stress ya dehydration se ho sakta hai.',
-                    'precautions': [
-                        'Shant andhere kamre me rest karein',
-                        'Khoob paani piyein',
-                        'Screen time kam karein'
-                    ]
-                })
-
-        # --- B. MULTI-SYMPTOM ML MODEL WITH CONFIDENCE GUARD ---
         input_features = [0] * len(dataset_symptoms)
-        for symptom in smart_symptoms:
-            if symptom in dataset_symptoms:
-                idx = dataset_symptoms.index(symptom)
-                input_features[idx] = 1
-                
-        features_array = np.array([input_features])
-        
-        # Check model probabilities
-        try:
-            probabilities = model.predict_proba(features_array)[0]
-            max_prob = np.max(probabilities)
-            prediction = model.predict(features_array)[0]
-            disease_name = str(prediction).strip()
-            
-            # If model confidence is very low (< 35%), do not show extreme diseases
-            if max_prob < 0.35:
-                disease_name = 'Non-Specific Viral Infection'
-        except:
-            prediction = model.predict(features_array)[0]
-            disease_name = str(prediction).strip()
-        
-        # Blacklist critical false alarms if input is general
-        if disease_name.lower() in ['aids', 'dimorphic hemmorhoids(piles)', 'hepatitis a', 'tuberculosis', 'paralysis (brain hemorrhage)']:
-            if not any(k in smart_symptoms for k in ['loss_of_balance', 'unsteadiness', 'altered_sensorium', 'blood_in_sputum', 'yellowish_skin']):
-                disease_name = 'Seasonal Viral Syndrome'
+        match_count = 0
 
+        for item in extracted:
+            clean_item = item.replace(' ', '_').lower()
+            if clean_item in dataset_symptoms:
+                idx = dataset_symptoms.index(clean_item)
+                input_features[idx] = 1
+                match_count += 1
+            else:
+                # Fuzzy fallback against dataset columns
+                best_match, score = process.extractOne(clean_item, dataset_symptoms)
+                if score >= 75:
+                    idx = dataset_symptoms.index(best_match)
+                    input_features[idx] = 1
+                    match_count += 1
+
+        features_array = np.array([input_features])
+
+        if match_count == 0:
+            disease_name = "Seasonal Viral Syndrome"
+        else:
+            try:
+                probabilities = model.predict_proba(features_array)[0]
+                max_prob = np.max(probabilities)
+                pred = model.predict(features_array)[0]
+                disease_name = str(pred).strip().replace('_', ' ').title()
+
+                # Safety guard for low probability false alarms
+                if max_prob < 0.35 and match_count <= 2:
+                    disease_name = "Common Viral Flu"
+            except:
+                pred = model.predict(features_array)[0]
+                disease_name = str(pred).strip().replace('_', ' ').title()
+
+        # Final false-positive guard
+        if disease_name.lower() in ['aids', 'dimorphic hemmorhoids(piles)', 'hepatitis a', 'paralysis (brain hemorrhage)', 'tuberculosis']:
+            if match_count < 3:
+                disease_name = "Seasonal Influenza / Viral Cold"
+
+        # Lookup Description & Precautions
         disease_desc = "Clinical symptom pattern evaluation completed."
         if not description_df.empty and 'Disease' in description_df.columns:
             match = description_df[description_df['Disease'].str.lower() == disease_name.lower()]
             if not match.empty:
                 disease_desc = match.iloc[0]['Description']
-                
+
         precautions = []
         if not precaution_df.empty and 'Disease' in precaution_df.columns:
             match_prec = precaution_df[precaution_df['Disease'].str.lower() == disease_name.lower()]
@@ -276,15 +229,17 @@ def predict():
                 for col in ['Precaution_1', 'Precaution_2', 'Precaution_3', 'Precaution_4']:
                     if col in row and pd.notna(row[col]):
                         precautions.append(str(row[col]).title())
-                        
+
         if not precautions:
             precautions = ["Rest adequately and monitor body vitals", "Maintain hydration with ORS/Water", "Consult a registered doctor"]
-            
+
         return jsonify({
-            'disease': disease_name.replace('_', ' ').title(),
+            'disease': disease_name,
+            'conversational_overview': triage_data.get('bot_response', ''),
             'description': disease_desc,
             'precautions': precautions
         })
+
     except Exception as e:
         print(f"Prediction Error: {e}")
         return jsonify({'error': 'Diagnosis evaluation failed. Please try again.'})
@@ -294,13 +249,13 @@ def scan_medicine():
     try:
         data = request.get_json() or {}
         raw_text = data.get('raw_text', '').lower()
-        
+
         if not raw_text or len(raw_text.strip()) < 2:
             return jsonify({'error': 'No readable text received from scanner.'})
-            
+
         matched_med = None
         best_overall_score = 0
-        
+
         for key, details in MEDICINE_DATABASE.items():
             if key in raw_text:
                 matched_med = details
@@ -311,7 +266,7 @@ def scan_medicine():
                     break
             if matched_med:
                 break
-                
+
         if not matched_med:
             words = [w for w in raw_text.split() if len(w) >= 3]
             for word in words:
@@ -321,7 +276,7 @@ def scan_medicine():
                         if score > best_overall_score and score >= 60:
                             best_overall_score = score
                             matched_med = details
-                            
+
         if matched_med:
             return jsonify({
                 'medicine_name': matched_med['name'],
@@ -338,7 +293,7 @@ def scan_medicine():
                 'usage': 'Prescription medication detected. Follow doctor/pharmacist dosage directions.',
                 'safety_note': 'Ensure batch number and expiry date are verified before consuming.'
             })
-            
+
     except Exception as e:
         return jsonify({'error': f'Scanner processing failed: {str(e)}'})
 

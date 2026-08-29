@@ -2,8 +2,10 @@ Flask
 scikit-learn
 numpy
 pandas
+google-generativeai
+python-dotenv
 deep-translator
 fuzzywuzzy
+python-Levenshtein
+requests
 gunicorn
-Pillow
-pytesseract
