@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MediSmart AI | Clinical Intelligence Suite</title>
-    <!-- Modern Typography & Icons -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Typography & Icons -->
+    <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
+    <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
+    <link href="[https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap](https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap)" rel="stylesheet">
+    <link rel="stylesheet" href="[https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css](https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css)">
     <!-- Select2 & jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="[https://code.jquery.com/jquery-3.6.0.min.js](https://code.jquery.com/jquery-3.6.0.min.js)"></script>
+    <link href="[https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css](https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css)" rel="stylesheet" />
+    <script src="[https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js](https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js)"></script>
     <!-- OCR Engine -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="[https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js](https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js)"></script>
     
     <style>
         :root {
@@ -460,7 +460,11 @@
 
                 if (data.error) {
                     appendMessage('bot', `⚠️ ${data.error}`);
+                } else if (data.is_chat_only) {
+                    // Casual Chat without Diagnosis Card
+                    appendMessage('bot', data.conversational_overview);
                 } else {
+                    // Clinical Diagnosis Card
                     let precItems = data.precautions.map(p => `<li>${p}</li>`).join('');
                     let diagHtml = `
                         <div class="diag-card">
@@ -486,7 +490,7 @@
             })
             .catch(() => {
                 if (loadingMsg) loadingMsg.remove();
-                appendMessage('bot', '⚠️ Server connection error. Make sure app.py is running on http://127.0.0.1:5000');
+                appendMessage('bot', '⚠️ Server connection error. Make sure app.py is running on [http://127.0.0.1:5000](http://127.0.0.1:5000)');
             });
         }
 

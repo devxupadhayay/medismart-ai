@@ -14,7 +14,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# --- 1. Load ML Model & Reference Datasets ---
+# --- 1. Load ML Model & Datasets ---
 try:
     model = pickle.load(open('model.pkl', 'rb'))
     dataset_symptoms = pickle.load(open('columns.pkl', 'rb'))
@@ -35,23 +35,17 @@ except Exception as e:
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model_gemini = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        generation_config={
-            "temperature": 0.2,
-            "response_mime_type": "application/json"
-        }
-    )
+    model_gemini = genai.GenerativeModel("gemini-1.5-flash")
 else:
     model_gemini = None
-    print("Warning: GEMINI_API_KEY not found in .env. Running fallback NLP.")
+    print("Warning: GEMINI_API_KEY missing in .env")
 
 # --- 3. Medicine Knowledge Base ---
 MEDICINE_DATABASE = {
     "paracetamol": {
         "name": "Paracetamol (Dolo 650 / Paracip 500 / Calpol)",
         "aliases": ["paracip", "dolo", "calpol", "crocin", "acetaminophen", "pacimol", "febrex", "wracip", "poeromo", "tablets ip 500", "500 mg", "650 mg"],
-        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Available at PM Jan Aushadhi Kendras.",
+        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Available at all PM Jan Aushadhi Kendras.",
         "composition": "Paracetamol IP - Pure Analgesic & Antipyretic Agent",
         "usage": "Relief from mild to high fever, tension headache, body ache, and toothache.",
         "safety_note": "Maximum daily limit is 4000mg. Keep a 4-6 hour gap between doses. Avoid alcohol."
@@ -106,34 +100,95 @@ MEDICINE_DATABASE = {
     }
 }
 
-# --- 4. Gemini Triage Engine ---
-def extract_with_gemini(raw_text):
-    if not model_gemini:
-        return {"triage_action": "RUN_MODEL", "extracted_symptoms": raw_text.lower().split(), "bot_response": "Processed via backup engine."}
+# --- 4. Triage NLP Brain ---
+def triage_nlp(raw_text):
+    clean = raw_text.lower().strip()
     
-    prompt = f"""
-    You are MediSmart, a multi-lingual medical triage assistant.
-    Analyze user text in Hindi, Hinglish, Marathi, or English.
+    # 1. Direct Greetings Filter
+    greetings = ["hi", "hello", "hey", "good morning", "good evening", "good afternoon", "namaste", "kaise ho", "kya haal hai", "thank you", "thanks"]
+    if clean in greetings or len(clean.split()) == 1 and clean in greetings:
+        return {
+            "type": "CHAT",
+            "bot_response": "Namaste! Main aapka MediSmart AI Health Assistant hoon. Aaj aapki sehat se judi kis takleef ya lakshan me madad kar sakta hoon?"
+        }
 
-    RULES:
-    1. If user input is a single non-specific symptom (e.g., only "bukhar" or "sir dard"), set "triage_action": "FOLLOW_UP", give a preliminary condition name (e.g., "Viral Pyrexia"), a friendly 1-sentence Hindi/Hinglish response in "bot_response", and 4 common follow-up symptom options in "follow_up_symptoms".
-    2. If multiple symptoms exist (e.g., "bukhar aur sardi"), match them against the clinical list, set "triage_action": "RUN_MODEL", and provide a 1-sentence Hindi/Hinglish overview in "bot_response".
-    3. Return JSON ONLY with keys:
-       - "triage_action": "FOLLOW_UP" or "RUN_MODEL"
-       - "disease_candidate": string or null
-       - "bot_response": string
-       - "follow_up_symptoms": list of strings (if follow up)
-       - "extracted_symptoms": list of strings matched with dataset
+    # 2. Rule-Based Fallback / Priority Engine (Guarantees zero AIDS/Piles on Fever+Cold)
+    has_fever = any(w in clean for w in ["bukhar", "बुखार", "fever", "tap", "temperature"])
+    has_cold = any(w in clean for w in ["sardi", "सर्दी", "cold", "khasi", "खांसी", "cough", "jukham", "chheenk", "chheenko"])
+    has_headache = any(w in clean for w in ["sirdard", "sir dard", "सर दर्द", "headache"])
+    has_stomach = any(w in clean for w in ["pet dard", "pet kharab", "dast", "loose motion", "ulti", "vomit", "acidity", "gas"])
 
-    VERIFIED DATASET SYMPTOMS LIST:
-    {', '.join(verified_symptoms_list[:60])}
-    """
-    try:
-        response = model_gemini.generate_content(prompt + f"\n\nUser Input: {raw_text}")
-        return json.loads(response.text)
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
-        return {"triage_action": "RUN_MODEL", "extracted_symptoms": raw_text.lower().split(), "bot_response": "Pattern analyzed."}
+    if has_fever and has_cold:
+        return {
+            "type": "DIRECT_DIAGNOSIS",
+            "disease_name": "Seasonal Influenza / Viral Cold Flu",
+            "bot_response": "Bukhar ke sath sardi aur khasi hona aam seasonal viral respiratory infection (Flu) ka sanket hai.",
+            "description": "Viral flu mausam badalne par aam taur par 3 se 5 din tak rehta hai. Isme gala kharab aur body ache bhi ho sakta hai.",
+            "precautions": ["Paracetamol (500mg) for fever relief", "Garm paani ki steam (bhaap) lein aur namak paani se gargle karein", "Garm soup aur khoob sara paani piyein", "Agar bukhar 4 din se zyada rahe toh doctor se test karwayein"]
+        }
+
+    if has_fever and not has_cold and not has_stomach and not has_headache:
+        return {
+            "type": "FOLLOW_UP",
+            "disease_name": "Viral Pyrexia (Acute Viral Fever)",
+            "bot_response": "Sirf bukhar aana aam viral infection ya thakan ka sanket hai. Kya aapko iske sath kuch aur lakshan bhi hain?",
+            "follow_up_symptoms": ["Sardi / Khasi", "Sir Dard", "Thand Lagna (Chills)", "Kamzori / Body Pain"],
+            "description": "Akela bukhar aksar aam viral attack se hota hai. Specific bimari janne ke liye follow-up select karein.",
+            "precautions": ["Paracetamol (500mg) as advised for temperature", "Hydration ke liye ORS / Nariyal paani piyein", "Gili patti (Cold compress) lagayein", "Doctor se checkup karwayein agar bukhar 102°F se zyada ho"]
+        }
+
+    if has_stomach:
+        return {
+            "type": "DIRECT_DIAGNOSIS",
+            "disease_name": "Acute Gastroenteritis / Stomach Infection",
+            "bot_response": "Pet dard, loose motion ya ulti aam taur par contaminated food ya stomach viral/bacterial infection se hota hai.",
+            "description": "Yeh infection dehydration paida kar sakta hai, isliye liquid intake sabse zaroori hai.",
+            "precautions": ["ORS (Electral) paani har ghante thoda-thoda piyein", "Khane me dahi, khichdi aur kela jaise halki diet lein", "Tali-bhuni aur spicy cheezon se parhez karein", "Agar ulti na ruke toh doctor se clinic par milen"]
+        }
+
+    # 3. Gemini LLM Deep Analysis (For general concerns like Hair Fall, Pimples, or complex multi-symptoms)
+    if model_gemini:
+        prompt = f"""
+        You are MediSmart clinical AI assistant.
+        Analyze user text: "{raw_text}" (Hindi/Hinglish/Marathi/English).
+        
+        Respond ONLY with a valid JSON in one of these exact formats:
+
+        Format A (If health issue is outside typical infectious diseases, like hair fall, dandruff, acne, joint pain):
+        {{
+            "type": "GENERAL_HEALTH",
+            "disease_name": "Issue Name (e.g., Telogen Effluvium / Hair Fall)",
+            "bot_response": "Empathetic clinical explanation in Hindi/Hinglish.",
+            "description": "Clinical overview.",
+            "precautions": ["Precaution 1", "Precaution 2", "Precaution 3", "Precaution 4"]
+        }}
+
+        Format B (If multiple hospital clinical symptoms are present):
+        {{
+            "type": "MODEL",
+            "extracted_symptoms": ["matching symptoms from list below"],
+            "bot_response": "1-sentence Hindi/Hinglish summary."
+        }}
+
+        VERIFIED CLINICAL SYMPTOMS LIST:
+        {', '.join(verified_symptoms_list[:70])}
+        """
+        try:
+            resp = model_gemini.generate_content(prompt)
+            txt = resp.text.strip()
+            if txt.startswith("```json"): txt = txt[7:]
+            if txt.startswith("```"): txt = txt[3:]
+            if txt.endswith("```"): txt = txt[:-3]
+            return json.loads(txt.strip())
+        except Exception as e:
+            print(f"Gemini API parse error: {e}")
+
+    # Fallback to ML Model
+    return {
+        "type": "MODEL",
+        "extracted_symptoms": clean.replace(',', ' ').split(),
+        "bot_response": "Symptoms analyzed with clinical engine."
+    }
 
 # --- 5. Application Routes ---
 @app.route('/')
@@ -144,36 +199,45 @@ def home():
 def predict():
     try:
         data = request.get_json() or {}
-        
-        # Check if call comes from manual selector array or chatbot text string
         if 'symptoms' in data and isinstance(data['symptoms'], list):
-            raw_symptoms_list = data['symptoms']
-            user_text = " ".join(raw_symptoms_list)
+            user_text = " ".join(data['symptoms'])
         else:
             user_text = data.get('symptoms_text', '').strip()
 
         if not user_text:
             return jsonify({'error': 'Kripya apne lakshan likhein ya select karein.'})
 
-        # --- A. Gemini Analysis ---
-        triage_data = extract_with_gemini(user_text)
+        triage = triage_nlp(user_text)
 
-        # Handle Single Symptom Follow-Up
-        if triage_data.get("triage_action") == "FOLLOW_UP":
+        # Case 1: Casual Chat
+        if triage.get("type") == "CHAT":
             return jsonify({
-                'disease': triage_data.get('disease_candidate', 'Viral Pyrexia (Viral Fever)'),
-                'is_single': True,
-                'conversational_overview': triage_data.get('bot_response', 'Aapko bukhar ke sath aur kya pareshani hai?'),
-                'follow_up_options': triage_data.get('follow_up_symptoms', ['Sardi / Khasi', 'Sir Dard', 'Thand Lagna', 'Kamzori']),
-                'description': 'Sirf ek lakshan aam viral ya seasonal infection ka sanket hai. Specific bimari ke liye follow-up lakshan chunein.',
-                'precautions': ['Pani aur ORS ka sevan badhayein', 'Paryapt aaram karein', '3 din se zyada takleef par doctor se milen']
+                'is_chat_only': True,
+                'conversational_overview': triage.get('bot_response')
             })
 
-        # --- B. Multi-Symptom Processing with ML Model ---
-        extracted = triage_data.get('extracted_symptoms', [])
-        if not extracted:
-            extracted = user_text.lower().replace(',', ' ').split()
+        # Case 2: Single Symptom Follow-Up
+        if triage.get("type") == "FOLLOW_UP":
+            return jsonify({
+                'disease': triage.get('disease_name'),
+                'is_single': True,
+                'conversational_overview': triage.get('bot_response'),
+                'follow_up_options': triage.get('follow_up_symptoms'),
+                'description': triage.get('description'),
+                'precautions': triage.get('precautions')
+            })
 
+        # Case 3: Direct Handled Diagnosis (Fever+Cold, Stomach issues)
+        if triage.get("type") == "DIRECT_DIAGNOSIS" or triage.get("type") == "GENERAL_HEALTH":
+            return jsonify({
+                'disease': triage.get('disease_name'),
+                'conversational_overview': triage.get('bot_response'),
+                'description': triage.get('description'),
+                'precautions': triage.get('precautions')
+            })
+
+        # Case 4: ML Random Forest Prediction
+        extracted = triage.get('extracted_symptoms', [])
         input_features = [0] * len(dataset_symptoms)
         match_count = 0
 
@@ -184,7 +248,6 @@ def predict():
                 input_features[idx] = 1
                 match_count += 1
             else:
-                # Fuzzy fallback against dataset columns
                 best_match, score = process.extractOne(clean_item, dataset_symptoms)
                 if score >= 75:
                     idx = dataset_symptoms.index(best_match)
@@ -201,15 +264,13 @@ def predict():
                 max_prob = np.max(probabilities)
                 pred = model.predict(features_array)[0]
                 disease_name = str(pred).strip().replace('_', ' ').title()
-
-                # Safety guard for low probability false alarms
                 if max_prob < 0.35 and match_count <= 2:
                     disease_name = "Common Viral Flu"
             except:
                 pred = model.predict(features_array)[0]
                 disease_name = str(pred).strip().replace('_', ' ').title()
 
-        # Final false-positive guard
+        # False-alarm block
         if disease_name.lower() in ['aids', 'dimorphic hemmorhoids(piles)', 'hepatitis a', 'paralysis (brain hemorrhage)', 'tuberculosis']:
             if match_count < 3:
                 disease_name = "Seasonal Influenza / Viral Cold"
@@ -235,7 +296,7 @@ def predict():
 
         return jsonify({
             'disease': disease_name,
-            'conversational_overview': triage_data.get('bot_response', ''),
+            'conversational_overview': triage.get('bot_response', ''),
             'description': disease_desc,
             'precautions': precautions
         })
