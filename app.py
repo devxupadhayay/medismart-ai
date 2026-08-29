@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import warnings
+import requests
 from deep_translator import GoogleTranslator
 from fuzzywuzzy import process, fuzz
 
@@ -26,73 +27,104 @@ except Exception as e:
     description_df = pd.DataFrame()
     precaution_df = pd.DataFrame()
 
-# --- 2. Advanced Medicine & Generic Database ---
+# Common Hindi/Colloquial Term Mapping
+LOCAL_TERM_MAP = {
+    "सर दर्द": "headache", "sirdard": "headache", "sir dard": "headache",
+    "bukhar": "fever", "बुखार": "fever", "tap": "fever",
+    "pet dard": "stomach_pain", "पेट दर्द": "stomach_pain",
+    "khasi": "cough", "खांसी": "cough", "khokla": "cough",
+    "thakan": "fatigue", "थकान": "fatigue", "thakwa": "fatigue",
+    "ulti": "vomiting", "उल्टी": "vomiting",
+    "dast": "diarrhoea", "दस्त": "diarrhoea", "loose motion": "diarrhoea", "लेटरींग": "diarrhoea", "latrine": "diarrhoea",
+    "chills": "chills", "thand": "chills", "ठंड": "chills",
+    "khujli": "itching", "खुजली": "itching"
+}
+
+# --- 2. Advanced NLP Translation & Extraction Layer ---
+def process_nlp_symptoms(raw_symptoms_list):
+    final_symptoms = []
+    combined_raw_text = " ".join([str(s) for s in raw_symptoms_list]).lower()
+    
+    # 1. Local phrase override
+    for phrase, mapped_salt in LOCAL_TERM_MAP.items():
+        if phrase in combined_raw_text:
+            final_symptoms.append(mapped_salt)
+            
+    # 2. Translation
+    try:
+        translated_text = GoogleTranslator(source='auto', target='en').translate(combined_raw_text).lower()
+    except:
+        translated_text = combined_raw_text
+        
+    # Check dataset terms directly against translated text
+    for symp in dataset_symptoms:
+        clean_symp_name = symp.replace('_', ' ').lower()
+        if clean_symp_name in translated_text or clean_symp_name in combined_raw_text:
+            final_symptoms.append(symp)
+            
+    # 3. Word-by-word fuzzy fallback
+    words = translated_text.split()
+    for word in words:
+        if len(word) >= 4 and dataset_symptoms:
+            match, score = process.extractOne(word, dataset_symptoms)
+            if score > 75:
+                final_symptoms.append(match)
+                
+    return list(set(final_symptoms))
+
+# --- 3. Medicine Knowledge Base ---
 MEDICINE_DATABASE = {
     "paracetamol": {
         "name": "Paracetamol / Paracip-500 / Dolo 650",
+        "search_term": "Paracetamol",
         "aliases": ["paracip", "dolo", "calpol", "crocin", "acetaminophen", "pacimol", "febrex", "wracip", "poeromo", "tablets ip 500", "500 mg"],
-        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Available at PM Jan Aushadhi Kendras under standard salt formulation.",
+        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Certified Essential Drug.",
         "composition": "Paracetamol IP (500mg / 650mg) - Pure Analgesic & Antipyretic Agent",
-        "usage": "Relief from high/mild fever, severe headache, joint pain, toothache, and viral body aches.",
-        "safety_note": "Maximum daily dose is 4000mg. Maintain a minimum gap of 4 to 6 hours between doses. Avoid alcohol."
+        "usage": "Relief from high/mild fever, severe tension headache, joint pain, toothache, and body pain.",
+        "safety_note": "Maximum daily dose is 4000mg. Keep 4 to 6 hours gap between doses. Avoid alcohol.",
+        "is_essential": True
     },
     "azithromycin": {
         "name": "Azithromycin 500mg (Azithral / Azee)",
+        "search_term": "Azithromycin",
         "aliases": ["azithral", "azee", "azimax", "zady", "azibact", "azithro", "500 tab"],
-        "generic_info": "Generic Salt: Azithromycin 500mg Tablet IP. Supplied under National Essential Medicine List (NLEM).",
-        "composition": "Azithromycin Dihydrate (500mg) - Broad Spectrum Macrolide Antibiotic",
-        "usage": "Treats bacterial throat infections (tonsillitis), chest infections, pneumonia, and severe sinus issues.",
-        "safety_note": "Complete the full 3 or 5-day course as prescribed. Take 1 hour before or 2 hours after food."
+        "generic_info": "Generic Salt: Azithromycin 500mg Tablet IP (NLEM Certified).",
+        "composition": "Azithromycin Dihydrate (500mg) - Broad Spectrum Antibiotic",
+        "usage": "Treats bacterial throat infections, chest infections, and sinus issues.",
+        "safety_note": "Complete the full 3 or 5-day course. Take 1 hr before or 2 hrs after food.",
+        "is_essential": True
     },
     "cetirizine": {
         "name": "Cetirizine 10mg (Okacet / Cetzine)",
+        "search_term": "Cetirizine",
         "aliases": ["okacet", "cetzine", "alerid", "zyrtec", "cetriz", "cetirizine hydrochloride"],
-        "generic_info": "Generic Salt: Cetirizine HCl 10mg. Unbranded generic strips offer the identical antihistamine relief.",
-        "composition": "Cetirizine Hydrochloride IP (10mg) - Second-Generation Antihistamine",
-        "usage": "Relieves allergic sneezing, runny nose, allergic rhinitis, watery eyes, and skin urticaria/itching.",
-        "safety_note": "May cause mild drowsiness. Avoid driving or operating heavy machinery after consumption."
+        "generic_info": "Generic Salt: Cetirizine HCl 10mg. Standard OTC Anti-allergic.",
+        "composition": "Cetirizine Hydrochloride IP (10mg) - Antihistamine",
+        "usage": "Relieves allergic sneezing, runny nose, watery eyes, and skin itching.",
+        "safety_note": "May cause mild drowsiness. Avoid driving immediately after consumption.",
+        "is_essential": True
     },
     "pantoprazole": {
         "name": "Pantoprazole 40mg (Pan 40 / Pantocid)",
+        "search_term": "Pantoprazole",
         "aliases": ["pan40", "pantocid", "pantosec", "pan-d", "pantoprazole gastro", "pantodac"],
-        "generic_info": "Generic Salt: Pantoprazole Gastro-Resistant Tablets IP (40mg). Available across generic pharmacies.",
-        "composition": "Pantoprazole Sodium (40mg) - Proton Pump Inhibitor (Acid Reducer)",
-        "usage": "Controls severe acidity, GERD, heartburn, peptic ulcers, and protects stomach lining.",
-        "safety_note": "Recommended to consume once daily in the morning, 30 minutes before breakfast."
+        "generic_info": "Generic Salt: Pantoprazole Gastro-Resistant Tablets IP (40mg).",
+        "composition": "Pantoprazole Sodium (40mg) - Proton Pump Inhibitor (PPI)",
+        "usage": "Controls acidity, GERD, heartburn, peptic ulcers, and stomach burn.",
+        "safety_note": "Consume once daily in the morning, 30 minutes before food.",
+        "is_essential": True
     },
     "combiflam": {
         "name": "Combiflam / Flexon",
+        "search_term": "Ibuprofen Paracetamol",
         "aliases": ["flexon", "brufen", "ibuprofen", "ibugesic", "ibuprofen paracetamol"],
-        "generic_info": "Generic Salt: Ibuprofen 400mg + Paracetamol 325mg Combination. Standard generic NSAID formulation.",
-        "composition": "Ibuprofen (400mg) + Paracetamol (325mg) - Dual Action Anti-inflammatory & Pain Reliever",
-        "usage": "Relief for acute muscular pain, joint inflammation, dental pain, and sprains.",
-        "safety_note": "Always consume strictly after a full meal to prevent stomach irritation. Avoid if having renal issues."
+        "generic_info": "Generic Salt: Ibuprofen 400mg + Paracetamol 325mg Combination.",
+        "composition": "Ibuprofen (400mg) + Paracetamol (325mg) - Dual Action NSAID",
+        "usage": "Potent relief for acute muscular pain, dental pain, and sprains.",
+        "safety_note": "Always consume strictly after meals. Avoid if having kidney issues.",
+        "is_essential": False
     }
 }
-
-# --- 3. NLP Symptoms Translation Layer ---
-def process_nlp_symptoms(raw_symptoms_list):
-    final_symptoms = []
-    translator = GoogleTranslator(source='auto', target='en')
-    
-    for raw_word in raw_symptoms_list:
-        raw_word = str(raw_word).strip()
-        if len(raw_word) < 2:
-            continue
-        try:
-            english_word = translator.translate(raw_word).lower()
-        except:
-            english_word = raw_word.lower()
-            
-        if english_word in dataset_symptoms:
-            final_symptoms.append(english_word)
-        else:
-            if dataset_symptoms:
-                best_match, score = process.extractOne(english_word, dataset_symptoms)
-                if score > 70:
-                    final_symptoms.append(best_match)
-                    
-    return list(set(final_symptoms))
 
 # --- 4. Application Routes ---
 
@@ -100,23 +132,19 @@ def process_nlp_symptoms(raw_symptoms_list):
 def home():
     return render_template('index.html', symptoms=dataset_symptoms)
 
-@app.route('/scanner')
-def scanner():
-    return render_template('scanner.html')
-
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         frontend_symptoms = data.get('symptoms', [])
         
         if not frontend_symptoms:
-            return jsonify({'error': 'Please provide at least one symptom.'})
+            return jsonify({'error': 'Please describe or select at least one symptom.'})
             
         smart_symptoms = process_nlp_symptoms(frontend_symptoms)
         
         if not smart_symptoms:
-            return jsonify({'error': 'Could not match symptoms with dataset. Please try specific terms.'})
+            return jsonify({'error': 'System could not identify specific medical symptoms from your input. Please try specific terms like "bukhar", "sirdard", "diarrhoea", etc.'})
             
         input_features = [0] * len(dataset_symptoms)
         for symptom in smart_symptoms:
@@ -128,7 +156,7 @@ def predict():
         prediction = model.predict(features_array)[0]
         disease_name = str(prediction).strip()
         
-        disease_desc = "Clinical diagnosis pattern matching completed."
+        disease_desc = f"Clinical pattern matched {len(smart_symptoms)} identified symptom(s): {', '.join([s.replace('_',' ').title() for s in smart_symptoms])}."
         if not description_df.empty and 'Disease' in description_df.columns:
             match = description_df[description_df['Disease'].str.lower() == disease_name.lower()]
             if not match.empty:
@@ -144,7 +172,7 @@ def predict():
                         precautions.append(str(row[col]).title())
                         
         if not precautions:
-            precautions = ["Rest adequately", "Ensure proper hydration", "Consult a registered doctor"]
+            precautions = ["Rest adequately and monitor body vitals", "Maintain hydration with ORS/Water", "Consult a registered doctor"]
             
         return jsonify({
             'disease': disease_name.replace('_', ' ').title(),
@@ -153,12 +181,12 @@ def predict():
         })
     except Exception as e:
         print(f"Prediction Error: {e}")
-        return jsonify({'error': 'Internal server error while evaluating health scan.'})
+        return jsonify({'error': f'Diagnosis error: {str(e)}'})
 
 @app.route('/scan-medicine', methods=['POST'])
 def scan_medicine():
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         raw_text = data.get('raw_text', '').lower()
         
         if not raw_text or len(raw_text.strip()) < 2:
@@ -167,7 +195,6 @@ def scan_medicine():
         matched_med = None
         best_overall_score = 0
         
-        # Exact keyword & alias match
         for key, details in MEDICINE_DATABASE.items():
             if key in raw_text:
                 matched_med = details
@@ -179,7 +206,6 @@ def scan_medicine():
             if matched_med:
                 break
                 
-        # Fuzzy match fallback for OCR broken spellings
         if not matched_med:
             words = [w for w in raw_text.split() if len(w) >= 3]
             for word in words:
@@ -203,12 +229,11 @@ def scan_medicine():
                 'medicine_name': 'Clinical Medicine Formulation',
                 'generic_info': 'Generic Salt Equivalent: Consult your pharmacist for the non-branded chemical salt equivalent.',
                 'composition': f"Extracted Signature: {raw_text[:120].strip()}",
-                'usage': 'Prescription medication detected. Please verify complete packaging details with a pharmacist.',
-                'safety_note': 'Ensure batch number and expiry date are verified before use.'
+                'usage': 'Prescription drug. Follow medical practitioner advice.',
+                'safety_note': 'Ensure batch number and expiry date are verified before consuming.'
             })
             
     except Exception as e:
-        print(f"Scanner error: {e}")
         return jsonify({'error': f'Scanner processing failed: {str(e)}'})
 
 if __name__ == '__main__':
