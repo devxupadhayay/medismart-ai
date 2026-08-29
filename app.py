@@ -3,6 +3,8 @@ import pickle
 import numpy as np
 import pandas as pd
 import warnings
+import json
+import os
 from deep_translator import GoogleTranslator
 from fuzzywuzzy import process, fuzz
 
@@ -26,25 +28,30 @@ except Exception as e:
     description_df = pd.DataFrame()
     precaution_df = pd.DataFrame()
 
-# Common Indian colloquial mappings
-LOCAL_TERM_MAP = {
-    "सर दर्द": "headache", "sirdard": "headache", "sir dard": "headache",
-    "bukhar": "high_fever", "बुखार": "high_fever", "tap": "mild_fever", "fever": "high_fever",
-    "pet dard": "stomach_pain", "पेट दर्द": "stomach_pain", "stomach pain": "stomach_pain",
-    "khasi": "cough", "खांसी": "cough", "khokla": "cough", "cough": "cough",
-    "thakan": "fatigue", "थकान": "fatigue", "thakwa": "fatigue", "fatigue": "fatigue",
-    "ulti": "vomiting", "उल्टी": "vomiting", "vomit": "vomiting",
-    "dast": "diarrhoea", "दस्त": "diarrhoea", "loose motion": "diarrhoea", "लेटरींग": "diarrhoea",
-    "chills": "chills", "thand": "chills", "ठंड": "chills",
-    "khujli": "itching", "खुजली": "itching", "itching": "itching"
-}
+# --- 2. Dynamic JSON Symptoms Dictionary Loader ---
+LOCAL_TERM_MAP = {}
+if os.path.exists('symptoms_map.json'):
+    try:
+        with open('symptoms_map.json', 'r', encoding='utf-8') as f:
+            LOCAL_TERM_MAP = json.load(f)
+    except Exception as e:
+        print(f"JSON Load error: {e}")
 
-# --- 2. Expanded Generic Medicine Knowledge Base (25+ Most Used Indian Formulations) ---
+# Fallback basic terms if json missing
+if not LOCAL_TERM_MAP:
+    LOCAL_TERM_MAP = {
+        "bukhar": "high_fever", "बुखार": "high_fever", "fever": "high_fever",
+        "sirdard": "headache", "सर दर्द": "headache", "headache": "headache",
+        "sardi": "cold", "सर्दी": "cold", "khasi": "cough", "खांसी": "cough",
+        "ulti": "vomiting", "dast": "diarrhoea", "thakan": "fatigue"
+    }
+
+# --- 3. Medicine Knowledge Base ---
 MEDICINE_DATABASE = {
     "paracetamol": {
         "name": "Paracetamol (Dolo 650 / Paracip 500 / Calpol)",
         "aliases": ["paracip", "dolo", "calpol", "crocin", "acetaminophen", "pacimol", "febrex", "wracip", "poeromo", "tablets ip 500", "500 mg", "650 mg"],
-        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Available at all PM Jan Aushadhi Kendras.",
+        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Available at PM Jan Aushadhi Kendras.",
         "composition": "Paracetamol IP - Pure Analgesic & Antipyretic Agent",
         "usage": "Relief from mild to high fever, tension headache, body ache, and toothache.",
         "safety_note": "Maximum daily limit is 4000mg. Keep a 4-6 hour gap between doses. Avoid alcohol."
@@ -89,14 +96,6 @@ MEDICINE_DATABASE = {
         "usage": "Controls severe gastric acidity, GERD, heartburn, stomach ulcers, and acid reflux.",
         "safety_note": "Take once daily in the morning, 30 minutes before your first meal/breakfast."
     },
-    "pantoprazole_domperidone": {
-        "name": "Pantoprazole + Domperidone (Pan-D / Pantocid-D)",
-        "aliases": ["pan-d", "pand", "pantocid-d", "pantosec-d", "pantodac-dsr"],
-        "generic_info": "Generic Salt: Pantoprazole (40mg) + Domperidone (30mg SR) Capsule.",
-        "composition": "Acid Reducer + Prokinetic Anti-emetic",
-        "usage": "Acidity accompanied by nausea, morning vomiting, indigestion, and acid fullness.",
-        "safety_note": "Strictly take empty stomach in the morning with plain water."
-    },
     "combiflam": {
         "name": "Ibuprofen + Paracetamol (Combiflam / Flexon)",
         "aliases": ["combiflam", "flexon", "brufen", "ibugesic plus", "ibuprofen paracetamol"],
@@ -104,62 +103,38 @@ MEDICINE_DATABASE = {
         "composition": "Dual-action NSAID Analgesic & Anti-inflammatory",
         "usage": "Acute muscular pain, sprains, dental surgery pain, and joint swelling.",
         "safety_note": "Always consume strictly after a full meal to prevent stomach gastric irritation."
-    },
-    "metformin": {
-        "name": "Metformin 500mg (Glycomet 500 / Obimet)",
-        "aliases": ["glycomet", "obimet", "metfor", "metformin 500", "metformin hydrochloride"],
-        "generic_info": "Generic Salt: Metformin Hydrochloride Sustained Release IP 500mg.",
-        "composition": "Biguanide Class Antidiabetic Agent",
-        "usage": "Controls blood sugar levels in Type 2 Diabetes Mellitus and PCOS.",
-        "safety_note": "Take with or after main meals to avoid stomach upset. Monitor sugar regularly."
-    },
-    "telmisartan": {
-        "name": "Telmisartan 40mg (Telma 40 / Telvas 40)",
-        "aliases": ["telma", "telvas", "telmikind", "telsartan", "telmisartan 40"],
-        "generic_info": "Generic Salt: Telmisartan Tablets IP 40mg.",
-        "composition": "Angiotensin II Receptor Blocker (Antihypertensive)",
-        "usage": "Lowers high blood pressure (hypertension) and protects heart/kidneys.",
-        "safety_note": "Take at the same fixed time daily. Do not stop abruptly without doctor advice."
-    },
-    "ors": {
-        "name": "Oral Rehydration Salts (WHO-Formula ORS / Electral)",
-        "aliases": ["electral", "ors", "rehydrate", "w.h.o. formula", "energy drink powder"],
-        "generic_info": "Generic Salt: Standard WHO Formulation Oral Rehydration Salts.",
-        "composition": "Sodium Chloride + Potassium Chloride + Sodium Citrate + Anhydrous Dextrose",
-        "usage": "Treats severe dehydration caused by diarrhoea, vomiting, summer heat, or heavy sweating.",
-        "safety_note": "Dissolve entire packet in correct measured water (usually 1 litre). Consume within 24 hours."
     }
 }
 
-# --- 3. NLP Symptom Processing Layer ---
+# --- 4. NLP Symptom Extractor ---
 def process_nlp_symptoms(raw_symptoms_list):
-    final_symptoms = []
-    combined_raw = " ".join([str(s) for s in raw_symptoms_list]).lower()
+    extracted_tags = []
+    combined_text = " ".join([str(s) for s in raw_symptoms_list]).lower()
     
-    for phrase, mapped_key in LOCAL_TERM_MAP.items():
-        if phrase in combined_raw:
-            final_symptoms.append(mapped_key)
+    # 1. Match from Local/JSON Map
+    for phrase, tag in LOCAL_TERM_MAP.items():
+        if phrase in combined_text:
+            extracted_tags.append(tag)
             
+    # 2. Translation layer
     try:
-        translated = GoogleTranslator(source='auto', target='en').translate(combined_raw).lower()
+        translated = GoogleTranslator(source='auto', target='en').translate(combined_text).lower()
     except:
-        translated = combined_raw
+        translated = combined_text
         
+    for phrase, tag in LOCAL_TERM_MAP.items():
+        if phrase in translated:
+            extracted_tags.append(tag)
+            
+    # 3. Direct match with dataset features
     for symp in dataset_symptoms:
         clean_name = symp.replace('_', ' ').lower()
-        if clean_name in translated or clean_name in combined_raw:
-            final_symptoms.append(symp)
+        if clean_name in translated or clean_name in combined_text:
+            extracted_tags.append(symp)
             
-    words = translated.split()
-    for word in words:
-        if len(word) >= 4 and dataset_symptoms:
-            match, score = process.extractOne(word, dataset_symptoms)
-            if score > 75:
-                final_symptoms.append(match)
-                
-    return list(set(final_symptoms))
+    return list(set(extracted_tags)), combined_text
 
-# --- 4. Application Routes ---
+# --- 5. App Routes ---
 
 @app.route('/')
 def home():
@@ -174,46 +149,92 @@ def predict():
         if not frontend_symptoms:
             return jsonify({'error': 'Kripya kam se kam ek symptom likhein ya select karein.'})
             
-        smart_symptoms = process_nlp_symptoms(frontend_symptoms)
+        smart_symptoms, raw_user_text = process_nlp_symptoms(frontend_symptoms)
         
-        if not smart_symptoms:
-            return jsonify({'error': 'System aapke lakshan pehchan nahi paya. Kripya aam terms likhein (jaise: bukhar, sir dard, ulti, khasi).'})
-            
-        # --- FEATURE 1: CLINICAL SAFEGUARD & FOLLOW-UP ON SINGLE SYMPTOM ---
-        if len(smart_symptoms) == 1:
-            single = smart_symptoms[0]
-            if single in ['high_fever', 'mild_fever']:
+        # --- A. CLINICAL CLUSTER TRIAGE LAYER ---
+        has_fever = any(s in smart_symptoms for s in ['high_fever', 'mild_fever']) or any(w in raw_user_text for w in ['bukhar', 'बुखार', 'fever', 'tap'])
+        has_cold = any(s in smart_symptoms for s in ['cold', 'cough', 'continuous_sneezing', 'throat_irritation', 'runny_nose']) or any(w in raw_user_text for w in ['sardi', 'सर्दी', 'khasi', 'cold', 'jukham'])
+        has_headache = 'headache' in smart_symptoms or any(w in raw_user_text for w in ['sirdard', 'सर दर्द', 'headache'])
+        has_loose_motion = any(s in smart_symptoms for s in ['diarrhoea', 'vomiting', 'stomach_pain']) or any(w in raw_user_text for w in ['dast', 'loose motion', 'ulti', 'pet kharab'])
+
+        # Case 1: Fever + Cold/Cough
+        if has_fever and has_cold:
+            return jsonify({
+                'disease': 'Seasonal Influenza / Common Viral Flu',
+                'description': 'Bukhar ke sath sardi, khasi aur gale me kharash aam viral respiratory infection (Flu) ke lakshan hain. Yeh mausam badalne par 3 se 5 din tak rehta hai.',
+                'precautions': [
+                    'Paracetamol (500mg) for fever and body temperature control',
+                    'Steam inhalation (Bhaap lein) aur gungune paani se namak daal kar gargle karein',
+                    'Garm paani, soup aur liquid fluids zyada matra me lein',
+                    'Agar bukhar 102°F se upar jaye ya 4 din se zyada rahe toh doctor se milen'
+                ]
+            })
+
+        # Case 2: Fever + Headache
+        if has_fever and has_headache:
+            return jsonify({
+                'disease': 'Acute Viral Pyrexia with Cephalea',
+                'description': 'Bukhar ke sath sir dard aam taur par viral infection, dehydration ya sharir me thakan ki wajah se hota hai.',
+                'precautions': [
+                    'Paracetamol for fever relief and rest in a calm room',
+                    'ORS / Nariyal paani aur dehydration se bachein',
+                    'Mobile aur laptop screen time se parhez karein',
+                    'Agar ulti ya chakkar aayein toh doctor se blood test karwayein'
+                ]
+            })
+
+        # Case 3: Loose motion / Vomiting
+        if has_loose_motion:
+            return jsonify({
+                'disease': 'Acute Gastroenteritis (Stomach Infection)',
+                'description': 'Dast, ulti ya pet dard aam taur par contaminated food ya paani se hone wale bacterial/viral infection ke sanket hain.',
+                'precautions': [
+                    'ORS (Oral Rehydration Solution) har dast ke baad piyein',
+                    'Khane me dahi, khichdi aur kela jaise halki cheezein lein',
+                    'Tali-bhuni aur bahar ki cheezon se bilkul parhez karein',
+                    'Dehydration na hone dein aur doctor se consultation lein'
+                ]
+            })
+
+        # Case 4: Single Symptom Isolated
+        if len(smart_symptoms) <= 1:
+            if has_fever:
                 return jsonify({
                     'disease': 'Viral Pyrexia (Acute Viral Fever)',
                     'is_single': True,
-                    'identified_symptom': 'Fever / Bukhar',
-                    'follow_up_question': 'Aapko bukhar ke sath inme se aur kya mehsoos ho raha hai?',
-                    'follow_up_options': ['Thand lagna (Chills)', 'Sir dard (Headache)', 'Ulti (Vomiting)', 'Body pain / Thakan'],
-                    'description': 'Sirf bukhar aana aam viral infection ya seasonal badlav ka sanket hai. Agar bukhar 3 din se zyada rahe toh clinical test (CBC/Widal) zaroori hai.',
-                    'precautions': ['Paracetamol (500mg) as advised for temperature', 'Khoob sara paani aur ORS/Nariyal paani piyein', 'Gili patti (Cold compress) lagayein agar bukhar tez ho', '3 din se zyada bukhar par doctor se checkup karwayein']
+                    'identified_symptom': 'Bukhar (Fever)',
+                    'follow_up_question': 'Aapko bukhar ke sath inme se aur kya takleef hai?',
+                    'follow_up_options': ['Sardi / Khasi (Cold/Cough)', 'Sir dard (Headache)', 'Thand lagna (Chills)', 'Ulti / Dast (Vomiting)'],
+                    'description': 'Sirf bukhar aana aam viral infection ya seasonal change ka sanket hai.',
+                    'precautions': [
+                        'Paracetamol (500mg) as advised for fever',
+                        'Pani aur ORS ka sevan badhayein',
+                        'Gili patti (Cold compress) lagayein agar bukhar tez ho',
+                        'Doctor se consult karein'
+                    ]
                 })
-            elif single in ['headache']:
+            elif has_cold:
                 return jsonify({
-                    'disease': 'Tension Headache / Migraine Cephalea',
-                    'is_single': True,
-                    'identified_symptom': 'Headache / Sir Dard',
-                    'follow_up_question': 'Sir dard ke sath koi aur pareshani hai?',
-                    'follow_up_options': ['Ulti / Nausea', 'Aankhon me jalan', 'Chakkar aana', 'Gardan me dard'],
-                    'description': 'Akela sir dard aam taur par thakan, dehydration, screen stress ya neend ki kami se hota hai.',
-                    'precautions': ['Shant aur andhere kamre me aaram karein', 'Pani ki matra badhayein (Hydration)', 'Mobile/Laptop screen time kam karein', 'Agar ulti ke sath ho toh doctor ko dikhayein']
+                    'disease': 'Upper Respiratory Irritation / Common Cold',
+                    'description': 'Sardi, khasi ya chhinke aana aam allergy ya viral common cold ka sanket hai.',
+                    'precautions': [
+                        'Steam inhalation (Bhaap lein)',
+                        'Gunguna paani piyein aur thandi cheezon se parhez karein',
+                        'Antihistamine (jaise Cetirizine 10mg) raat ko le sakte hain'
+                    ]
                 })
-            elif single in ['cough']:
+            elif has_headache:
                 return jsonify({
-                    'disease': 'Upper Respiratory Tract Irritation (Common Cough)',
-                    'is_single': True,
-                    'identified_symptom': 'Cough / Khasi',
-                    'follow_up_question': 'Khasi ke sath koi aur lakshan hai?',
-                    'follow_up_options': ['Gale me kharash', 'Bukhar (Fever)', 'Balgum / Phlegm', 'Chheenkein (Sneezing)'],
-                    'description': 'Sookhi ya balgam wali khasi aam viral infection ya dust allergy se hoti hai.',
-                    'precautions': ['Gungune paani me namak daal kar gargle karein', 'Steam inhalation (Bhaap) lein', 'Thandi aur tali cheezon se parhez karein', 'Adrak-tulsi chai ya honey lein']
+                    'disease': 'Tension Headache / Migraine Strain',
+                    'description': 'Akela sir dard neend ki kami, screen stress ya dehydration se ho sakta hai.',
+                    'precautions': [
+                        'Shant andhere kamre me rest karein',
+                        'Khoob paani piyein',
+                        'Screen time kam karein'
+                    ]
                 })
 
-        # Multi-symptom processing with Random Forest
+        # --- B. MULTI-SYMPTOM ML MODEL WITH CONFIDENCE GUARD ---
         input_features = [0] * len(dataset_symptoms)
         for symptom in smart_symptoms:
             if symptom in dataset_symptoms:
@@ -221,10 +242,27 @@ def predict():
                 input_features[idx] = 1
                 
         features_array = np.array([input_features])
-        prediction = model.predict(features_array)[0]
-        disease_name = str(prediction).strip()
         
-        disease_desc = f"Clinical pattern matched {len(smart_symptoms)} symptom(s): {', '.join([s.replace('_',' ').title() for s in smart_symptoms])}."
+        # Check model probabilities
+        try:
+            probabilities = model.predict_proba(features_array)[0]
+            max_prob = np.max(probabilities)
+            prediction = model.predict(features_array)[0]
+            disease_name = str(prediction).strip()
+            
+            # If model confidence is very low (< 35%), do not show extreme diseases
+            if max_prob < 0.35:
+                disease_name = 'Non-Specific Viral Infection'
+        except:
+            prediction = model.predict(features_array)[0]
+            disease_name = str(prediction).strip()
+        
+        # Blacklist critical false alarms if input is general
+        if disease_name.lower() in ['aids', 'dimorphic hemmorhoids(piles)', 'hepatitis a', 'tuberculosis', 'paralysis (brain hemorrhage)']:
+            if not any(k in smart_symptoms for k in ['loss_of_balance', 'unsteadiness', 'altered_sensorium', 'blood_in_sputum', 'yellowish_skin']):
+                disease_name = 'Seasonal Viral Syndrome'
+
+        disease_desc = "Clinical symptom pattern evaluation completed."
         if not description_df.empty and 'Disease' in description_df.columns:
             match = description_df[description_df['Disease'].str.lower() == disease_name.lower()]
             if not match.empty:
@@ -249,9 +287,8 @@ def predict():
         })
     except Exception as e:
         print(f"Prediction Error: {e}")
-        return jsonify({'error': f'Diagnosis error: {str(e)}'})
+        return jsonify({'error': 'Diagnosis evaluation failed. Please try again.'})
 
-# --- FEATURE 3: EXPANDED MEDICINE SCANNER MATCHER ---
 @app.route('/scan-medicine', methods=['POST'])
 def scan_medicine():
     try:
@@ -296,7 +333,7 @@ def scan_medicine():
         else:
             return jsonify({
                 'medicine_name': 'Clinical Medicine Formulation',
-                'generic_info': 'Generic Salt Equivalent: Verify the salt name on packaging with your local pharmacist.',
+                'generic_info': 'Generic Salt Equivalent: Verify active salt on packaging with a pharmacist.',
                 'composition': f"Extracted Text: {raw_text[:120].strip()}",
                 'usage': 'Prescription medication detected. Follow doctor/pharmacist dosage directions.',
                 'safety_note': 'Ensure batch number and expiry date are verified before consuming.'
