@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from deep_translator import GoogleTranslator
-from fuzzywuzzy import process
+from fuzzywuzzy import process, fuzz
 
 warnings.filterwarnings("ignore")
 
@@ -26,7 +26,51 @@ except Exception as e:
     description_df = pd.DataFrame()
     precaution_df = pd.DataFrame()
 
-# --- 2. NLP Translation & Matching Layer ---
+# --- 2. Advanced Medicine & Generic Database ---
+MEDICINE_DATABASE = {
+    "paracetamol": {
+        "name": "Paracetamol / Paracip-500 / Dolo 650",
+        "aliases": ["paracip", "dolo", "calpol", "crocin", "acetaminophen", "pacimol", "febrex", "wracip", "poeromo", "tablets ip 500", "500 mg"],
+        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Available at PM Jan Aushadhi Kendras under standard salt formulation.",
+        "composition": "Paracetamol IP (500mg / 650mg) - Pure Analgesic & Antipyretic Agent",
+        "usage": "Relief from high/mild fever, severe headache, joint pain, toothache, and viral body aches.",
+        "safety_note": "Maximum daily dose is 4000mg. Maintain a minimum gap of 4 to 6 hours between doses. Avoid alcohol."
+    },
+    "azithromycin": {
+        "name": "Azithromycin 500mg (Azithral / Azee)",
+        "aliases": ["azithral", "azee", "azimax", "zady", "azibact", "azithro", "500 tab"],
+        "generic_info": "Generic Salt: Azithromycin 500mg Tablet IP. Supplied under National Essential Medicine List (NLEM).",
+        "composition": "Azithromycin Dihydrate (500mg) - Broad Spectrum Macrolide Antibiotic",
+        "usage": "Treats bacterial throat infections (tonsillitis), chest infections, pneumonia, and severe sinus issues.",
+        "safety_note": "Complete the full 3 or 5-day course as prescribed. Take 1 hour before or 2 hours after food."
+    },
+    "cetirizine": {
+        "name": "Cetirizine 10mg (Okacet / Cetzine)",
+        "aliases": ["okacet", "cetzine", "alerid", "zyrtec", "cetriz", "cetirizine hydrochloride"],
+        "generic_info": "Generic Salt: Cetirizine HCl 10mg. Unbranded generic strips offer the identical antihistamine relief.",
+        "composition": "Cetirizine Hydrochloride IP (10mg) - Second-Generation Antihistamine",
+        "usage": "Relieves allergic sneezing, runny nose, allergic rhinitis, watery eyes, and skin urticaria/itching.",
+        "safety_note": "May cause mild drowsiness. Avoid driving or operating heavy machinery after consumption."
+    },
+    "pantoprazole": {
+        "name": "Pantoprazole 40mg (Pan 40 / Pantocid)",
+        "aliases": ["pan40", "pantocid", "pantosec", "pan-d", "pantoprazole gastro", "pantodac"],
+        "generic_info": "Generic Salt: Pantoprazole Gastro-Resistant Tablets IP (40mg). Available across generic pharmacies.",
+        "composition": "Pantoprazole Sodium (40mg) - Proton Pump Inhibitor (Acid Reducer)",
+        "usage": "Controls severe acidity, GERD, heartburn, peptic ulcers, and protects stomach lining.",
+        "safety_note": "Recommended to consume once daily in the morning, 30 minutes before breakfast."
+    },
+    "combiflam": {
+        "name": "Combiflam / Flexon",
+        "aliases": ["flexon", "brufen", "ibuprofen", "ibugesic", "ibuprofen paracetamol"],
+        "generic_info": "Generic Salt: Ibuprofen 400mg + Paracetamol 325mg Combination. Standard generic NSAID formulation.",
+        "composition": "Ibuprofen (400mg) + Paracetamol (325mg) - Dual Action Anti-inflammatory & Pain Reliever",
+        "usage": "Relief for acute muscular pain, joint inflammation, dental pain, and sprains.",
+        "safety_note": "Always consume strictly after a full meal to prevent stomach irritation. Avoid if having renal issues."
+    }
+}
+
+# --- 3. NLP Symptoms Translation Layer ---
 def process_nlp_symptoms(raw_symptoms_list):
     final_symptoms = []
     translator = GoogleTranslator(source='auto', target='en')
@@ -50,11 +94,15 @@ def process_nlp_symptoms(raw_symptoms_list):
                     
     return list(set(final_symptoms))
 
-# --- 3. Routes ---
+# --- 4. Application Routes ---
 
 @app.route('/')
 def home():
     return render_template('index.html', symptoms=dataset_symptoms)
+
+@app.route('/scanner')
+def scanner():
+    return render_template('scanner.html')
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -68,7 +116,7 @@ def predict():
         smart_symptoms = process_nlp_symptoms(frontend_symptoms)
         
         if not smart_symptoms:
-            return jsonify({'error': 'System could not match your symptoms. Please try specific terms.'})
+            return jsonify({'error': 'Could not match symptoms with dataset. Please try specific terms.'})
             
         input_features = [0] * len(dataset_symptoms)
         for symptom in smart_symptoms:
@@ -80,14 +128,12 @@ def predict():
         prediction = model.predict(features_array)[0]
         disease_name = str(prediction).strip()
         
-        # Fetch dynamic description from CSV
-        disease_desc = "Clinical assessment pattern matching completed."
+        disease_desc = "Clinical diagnosis pattern matching completed."
         if not description_df.empty and 'Disease' in description_df.columns:
             match = description_df[description_df['Disease'].str.lower() == disease_name.lower()]
             if not match.empty:
                 disease_desc = match.iloc[0]['Description']
                 
-        # Fetch dynamic precautions from CSV
         precautions = []
         if not precaution_df.empty and 'Disease' in precaution_df.columns:
             match_prec = precaution_df[precaution_df['Disease'].str.lower() == disease_name.lower()]
@@ -98,7 +144,7 @@ def predict():
                         precautions.append(str(row[col]).title())
                         
         if not precautions:
-            precautions = ["Rest adequately", "Maintain proper hydration", "Consult a certified doctor for validation"]
+            precautions = ["Rest adequately", "Ensure proper hydration", "Consult a registered doctor"]
             
         return jsonify({
             'disease': disease_name.replace('_', ' ').title(),
@@ -106,8 +152,8 @@ def predict():
             'precautions': precautions
         })
     except Exception as e:
-        print(f"Prediction logic error: {e}")
-        return jsonify({'error': 'Internal server error while evaluating data.'})
+        print(f"Prediction Error: {e}")
+        return jsonify({'error': 'Internal server error while evaluating health scan.'})
 
 @app.route('/scan-medicine', methods=['POST'])
 def scan_medicine():
@@ -115,49 +161,55 @@ def scan_medicine():
         data = request.get_json()
         raw_text = data.get('raw_text', '').lower()
         
-        if not raw_text:
-            return jsonify({'error': 'No text detected from image.'})
+        if not raw_text or len(raw_text.strip()) < 2:
+            return jsonify({'error': 'No readable text received from scanner.'})
             
-        if any(term in raw_text for term in ['paracetamol', 'dolo', 'calpol', 'acetaminophen', 'crocin']):
-            medicine_data = {
-                'medicine_name': 'Paracetamol / Dolo 650',
-                'composition': 'Paracetamol IP (650mg / 500mg) - Analgesic & Antipyretic',
-                'usage': 'Widely prescribed for relieving mild to moderate fever, headaches, body aches, and post-viral recovery.'
-            }
-        elif any(term in raw_text for term in ['azithromycin', 'azithral', 'azee']):
-            medicine_data = {
-                'medicine_name': 'Azithromycin (500mg)',
-                'composition': 'Azithromycin Dihydrate - Macrolide Antibiotic',
-                'usage': 'Used in treatment of bacterial respiratory tract infections, tonsillitis, and ear/throat infections.'
-            }
-        elif any(term in raw_text for term in ['cetirizine', 'cetzine', 'okacet', 'alerid']):
-            medicine_data = {
-                'medicine_name': 'Cetirizine Hydrochloride',
-                'composition': 'Cetirizine HCl (10mg) - Second-Generation Antihistamine',
-                'usage': 'Used for allergic rhinitis, cold symptoms, watery eyes, sneezing, and skin itching/urticaria.'
-            }
-        elif any(term in raw_text for term in ['pantoprazole', 'pan', 'pantocid', 'pantosec']):
-            medicine_data = {
-                'medicine_name': 'Pantoprazole (40mg)',
-                'composition': 'Pantoprazole Sodium - Proton Pump Inhibitor (PPI)',
-                'usage': 'Reduces excess stomach acid production; treats gastroesophageal reflux disease (GERD) and gastritis.'
-            }
-        elif any(term in raw_text for term in ['ibuprofen', 'brufen', 'combiflam']):
-            medicine_data = {
-                'medicine_name': 'Ibuprofen / Combiflam',
-                'composition': 'Ibuprofen (400mg) + Paracetamol (325mg) - NSAID',
-                'usage': 'Relieves acute inflammatory pain, dental pain, muscular discomfort, and joint pain.'
-            }
+        matched_med = None
+        best_overall_score = 0
+        
+        # Exact keyword & alias match
+        for key, details in MEDICINE_DATABASE.items():
+            if key in raw_text:
+                matched_med = details
+                break
+            for alias in details['aliases']:
+                if alias in raw_text:
+                    matched_med = details
+                    break
+            if matched_med:
+                break
+                
+        # Fuzzy match fallback for OCR broken spellings
+        if not matched_med:
+            words = [w for w in raw_text.split() if len(w) >= 3]
+            for word in words:
+                for key, details in MEDICINE_DATABASE.items():
+                    for alias in [key] + details['aliases']:
+                        score = fuzz.partial_ratio(word, alias)
+                        if score > best_overall_score and score >= 60:
+                            best_overall_score = score
+                            matched_med = details
+                            
+        if matched_med:
+            return jsonify({
+                'medicine_name': matched_med['name'],
+                'generic_info': matched_med['generic_info'],
+                'composition': matched_med['composition'],
+                'usage': matched_med['usage'],
+                'safety_note': matched_med['safety_note']
+            })
         else:
-            medicine_data = {
-                'medicine_name': 'Detected Clinical Formulation',
-                'composition': f"Extracted Text Fragment: {raw_text[:120].strip()}",
-                'usage': 'Salt/formulation identified. Please consult a registered medical practitioner before consumption.'
-            }
+            return jsonify({
+                'medicine_name': 'Clinical Medicine Formulation',
+                'generic_info': 'Generic Salt Equivalent: Consult your pharmacist for the non-branded chemical salt equivalent.',
+                'composition': f"Extracted Signature: {raw_text[:120].strip()}",
+                'usage': 'Prescription medication detected. Please verify complete packaging details with a pharmacist.',
+                'safety_note': 'Ensure batch number and expiry date are verified before use.'
+            })
             
-        return jsonify(medicine_data)
     except Exception as e:
-        return jsonify({'error': f'Processing error: {str(e)}'})
+        print(f"Scanner error: {e}")
+        return jsonify({'error': f'Scanner processing failed: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(debug=True)

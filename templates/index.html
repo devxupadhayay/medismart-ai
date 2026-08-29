@@ -3,12 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MediSmart AI | Medicine Scanner</title>
-    <!-- Google Fonts & FontAwesome -->
+    <title>MediSmart AI | Health Assessment</title>
+    <!-- Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Client-side Tesseract.js (No server dependencies required) -->
+    <!-- Select2 & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <!-- OCR Engine -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { display: flex; height: 100vh; background-color: #f0fdfa; color: #334155; overflow: hidden; }
@@ -19,10 +24,10 @@
         .brand-name { font-size: 1.35rem; font-weight: 700; color: #ffffff; display: flex; align-items: center; gap: 10px; }
         .brand-subtitle { font-size: 0.75rem; color: #99f6e4; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .nav-menu { padding: 0 16px; flex: 1; margin-top: 10px; }
-        .nav-item { padding: 14px 18px; margin-bottom: 8px; border-radius: 10px; color: #ccfbf1; font-size: 0.95rem; display: flex; align-items: center; gap: 12px; cursor: pointer; text-decoration: none; }
-        .nav-item.active { background: rgba(255, 255, 255, 0.15); color: #ffffff; border-left: 4px solid #34d399; }
+        .nav-item { padding: 14px 18px; margin-bottom: 8px; border-radius: 10px; color: #ccfbf1; font-size: 0.95rem; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: 0.2s; }
+        .nav-item.active { background: rgba(255, 255, 255, 0.15); color: #ffffff; border-left: 4px solid #34d399; font-weight: 600; }
 
-        /* Main Content */
+        /* Main Workspace */
         .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .top-nav { background: #ffffff; padding: 18px 36px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
         .page-path { font-size: 0.85rem; color: #64748b; font-weight: 500; }
@@ -33,31 +38,64 @@
         .dashboard-header h1 { font-size: 1.75rem; font-weight: 700; color: #115e59; }
         .dashboard-header p { color: #64748b; font-size: 0.95rem; margin-top: 6px; }
 
-        /* Upload Area */
+        /* Cards & Controls */
         .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 30px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-        .dropzone { border: 2px dashed #99f6e4; background: #f0fdfa; border-radius: 14px; padding: 40px 20px; text-align: center; cursor: pointer; transition: 0.2s; }
+        .form-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 600; color: #334155; margin-bottom: 10px; margin-top: 20px; }
+        .form-label:first-child { margin-top: 0; }
+        
+        .voice-controls { display: flex; gap: 10px; align-items: center; }
+        .lang-select { border: 1px solid #99f6e4; border-radius: 8px; padding: 6px 10px; color: #0f766e; background: #ffffff; outline: none; }
+        .mic-btn { background: #f0fdfa; border: 1px solid #99f6e4; color: #0d9488; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .mic-btn:hover { background: #ccfbf1; }
+        .mic-active { background: #fef2f2 !important; color: #ef4444 !important; border-color: #fca5a5 !important; }
+
+        .nlp-textarea { width: 100%; border: 2px solid #e2e8f0; border-radius: 12px; padding: 12px; font-size: 0.95rem; resize: vertical; outline: none; margin-bottom: 12px; }
+        .nlp-textarea:focus { border-color: #0d9488; }
+
+        .select2-container--default .select2-selection--multiple { border: 2px solid #e2e8f0; border-radius: 12px; padding: 6px; }
+        .select2-container--default.select2-container--focus .select2-selection--multiple { border-color: #0d9488; }
+        .select2-selection__choice { background-color: #f0fdfa !important; border: 1px solid #99f6e4 !important; color: #0f766e !important; }
+
+        .btn-primary { background: #0d9488; color: #ffffff; border: none; padding: 14px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 20px; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-primary:hover { background: #0f766e; }
+
+        /* Scanner Dropzone */
+        .dropzone { border: 2px dashed #99f6e4; background: #f0fdfa; border-radius: 14px; padding: 36px 20px; text-align: center; cursor: pointer; transition: 0.2s; }
         .dropzone:hover { background: #ccfbf1; }
-        .dropzone i { font-size: 3rem; color: #0d9488; margin-bottom: 12px; }
-        .dropzone h3 { font-size: 1.1rem; color: #115e59; font-weight: 600; }
+        .dropzone i { font-size: 2.8rem; color: #0d9488; margin-bottom: 10px; }
+        .dropzone h3 { font-size: 1.05rem; color: #115e59; font-weight: 600; }
         .dropzone p { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
+        #preview-img { max-height: 180px; max-width: 100%; border-radius: 10px; margin-top: 15px; display: none; margin-left: auto; margin-right: auto; }
 
-        #preview-img { max-height: 200px; max-width: 100%; border-radius: 10px; margin-top: 15px; display: none; margin-left: auto; margin-right: auto; }
+        /* Progress & Status */
+        .progress-wrapper { display: none; margin-top: 24px; }
+        .progress-text { display: flex; justify-content: space-between; font-size: 0.85rem; color: #0f766e; margin-bottom: 6px; font-weight: 600; }
+        .progress-track { width: 100%; height: 8px; background: #ccfbf1; border-radius: 10px; overflow: hidden; }
+        .progress-fill { width: 0%; height: 100%; background: #0d9488; border-radius: 10px; transition: width 0.2s ease; }
+        .error-msg { display: none; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 16px 20px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; align-items: center; gap: 10px; }
 
-        /* Progress indicator */
-        .progress-box { display: none; margin-top: 20px; text-align: center; font-size: 0.95rem; color: #0f766e; font-weight: 600; }
-        .progress-box i { margin-right: 8px; }
-
-        /* Result Module */
-        #result-section { display: none; margin-top: 28px; }
-        .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px 24px; border-radius: 16px; display: flex; align-items: center; gap: 20px; margin-bottom: 24px; }
+        /* Results */
+        .result-box { display: none; margin-top: 28px; }
+        .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px 24px; border-radius: 16px; display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
         .alert-icon { background: #10b981; color: white; width: 50px; height: 50px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
         .alert-content h4 { font-size: 0.8rem; color: #047857; text-transform: uppercase; letter-spacing: 1px; }
-        .alert-content h2 { font-size: 1.75rem; color: #064e3b; font-weight: 800; margin: 0; }
+        .alert-content h2 { font-size: 1.65rem; color: #064e3b; font-weight: 800; margin: 0; }
+
+        .generic-card { background: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 16px; }
+        .generic-icon { color: #059669; font-size: 1.6rem; margin-top: 3px; }
+        .generic-content h3 { font-size: 1.1rem; color: #065f46; font-weight: 700; margin-bottom: 4px; }
+        .generic-content p { font-size: 0.92rem; color: #047857; line-height: 1.6; }
 
         .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         .data-card { border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; overflow: hidden; }
         .data-card-header { padding: 18px 24px; border-bottom: 1px solid #f1f5f9; background: #f8fafc; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 10px; }
-        .data-card-body { padding: 24px; font-size: 0.95rem; color: #475569; line-height: 1.7; }
+        .data-card-body { padding: 22px; font-size: 0.95rem; color: #475569; line-height: 1.7; }
+        .data-card-body ul { padding-left: 20px; }
+        .data-card-body li { margin-bottom: 8px; }
+
+        /* Section Visibility */
+        .tab-section { display: none; }
+        .tab-section.active-tab { display: block; }
 
         @media (max-width: 768px) {
             body { flex-direction: column; height: auto; overflow: visible; }
@@ -73,97 +111,339 @@
             <div class="brand-subtitle">Health Assessment</div>
         </div>
         <div class="nav-menu">
-            <a href="/" class="nav-item"><i class="fa-solid fa-stethoscope"></i> Patient Diagnosis</a>
-            <a href="/scanner" class="nav-item active"><i class="fa-solid fa-camera-retro"></i> Medicine Scanner</a>
+            <div class="nav-item active" id="tab-btn-diagnosis" onclick="switchTab('diagnosis')">
+                <i class="fa-solid fa-stethoscope"></i> Patient Diagnosis
+            </div>
+            <div class="nav-item" id="tab-btn-scanner" onclick="switchTab('scanner')">
+                <i class="fa-solid fa-camera-retro"></i> Medicine Scanner
+            </div>
         </div>
     </aside>
 
     <main class="main-content">
         <header class="top-nav">
-            <div class="page-path">Dashboard / <span>Medicine Scanner</span></div>
+            <div class="page-path">Dashboard / <span id="nav-title">Patient Diagnosis</span></div>
         </header>
 
         <div class="content-area">
-            <div class="dashboard-header">
-                <h1>Smart Medicine Scanner</h1>
-                <p>Upload a medicine strip or packaging to analyze active composition and primary usages.</p>
-            </div>
-
-            <div class="card">
-                <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="processMedicineImage(event)">
-                <div class="dropzone" onclick="document.getElementById('imageInput').click()">
-                    <i class="fa-solid fa-cloud-arrow-up"></i>
-                    <h3>Click to Upload Photo</h3>
-                    <p>Supports JPG, PNG (Ensure good lighting and readable text)</p>
-                    <img id="preview-img" alt="Uploaded Strip Preview">
+            <!-- 1. DIAGNOSIS TAB -->
+            <section id="section-diagnosis" class="tab-section active-tab">
+                <div class="dashboard-header">
+                    <h1>AI Diagnosis Portal</h1>
+                    <p>Select symptoms manually or speak in your native language for AI analysis.</p>
                 </div>
 
-                <div class="progress-box" id="progressBox">
-                    <i class="fa-solid fa-circle-notch fa-spin"></i>
-                    <span id="progressStatus">Reading text from strip via OCR...</span>
-                </div>
-            </div>
+                <div class="card">
+                    <div class="error-msg" id="error-alert">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Required: Please provide at least one symptom.
+                    </div>
 
-            <div id="result-section">
-                <div class="alert-success">
-                    <div class="alert-icon"><i class="fa-solid fa-capsules"></i></div>
-                    <div class="alert-content">
-                        <h4>Identified Medicine</h4>
-                        <h2 id="medicine-title">Medicine Name</h2>
+                    <div class="form-label">
+                        <span><i class="fa-solid fa-comment-medical"></i> Describe Symptoms (Voice / Text)</span>
+                        <div class="voice-controls">
+                            <select id="micLang" class="lang-select">
+                                <option value="hi-IN">हिंदी (Hindi)</option>
+                                <option value="en-IN">English</option>
+                                <option value="mr-IN">मराठी (Marathi)</option>
+                            </select>
+                            <button class="mic-btn" id="micBtn" onclick="startVoiceRecognition()">
+                                <i class="fa-solid fa-microphone"></i> Speak
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="nlpInput" class="nlp-textarea" rows="3" placeholder="E.g., Mujhe kal raat se bukhar aur sirdard hai..."></textarea>
+
+                    <div class="form-label">
+                        <span><i class="fa-solid fa-list-check"></i> Or Select Manually</span>
+                    </div>
+                    <select id="symptoms" multiple="multiple" style="width: 100%;">
+                        {% for symp in symptoms %}
+                        <option value="{{ symp }}">{{ symp | replace('_', ' ') | title }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <button class="btn-primary" id="predictBtn" onclick="runDiagnostics()">
+                        <i class="fa-solid fa-microchip"></i> Run Health Scan
+                    </button>
+
+                    <div class="progress-wrapper" id="progress-wrapper">
+                        <div class="progress-text">
+                            <span id="progress-status">Running Natural Language Processing (NLP)...</span>
+                            <span id="progress-percentage">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="progress-bar"></div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="data-grid">
-                    <div class="data-card">
-                        <div class="data-card-header"><i class="fa-solid fa-flask-vial"></i> Active Salt & Composition</div>
-                        <div class="data-card-body" id="composition-text"></div>
+                <div id="result-diagnosis" class="result-box">
+                    <div class="alert-success">
+                        <div class="alert-icon"><i class="fa-solid fa-shield-heart"></i></div>
+                        <div class="alert-content">
+                            <h4>Predicted Condition</h4>
+                            <h2 id="disease-name">Disease Name</h2>
+                        </div>
                     </div>
-                    <div class="data-card">
-                        <div class="data-card-header"><i class="fa-solid fa-hand-holding-medical"></i> Clinical Usages</div>
-                        <div class="data-card-body" id="usage-text"></div>
+                    <div class="data-grid">
+                        <div class="data-card">
+                            <div class="data-card-header"><i class="fa-solid fa-file-waveform"></i> AI Medical Overview</div>
+                            <div class="data-card-body" id="description-text"></div>
+                        </div>
+                        <div class="data-card">
+                            <div class="data-card-header"><i class="fa-solid fa-hand-holding-medical"></i> Suggested Precautions</div>
+                            <div class="data-card-body">
+                                <ul id="precautions-list"></ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </section>
+
+            <!-- 2. MEDICINE SCANNER TAB -->
+            <section id="section-scanner" class="tab-section">
+                <div class="dashboard-header">
+                    <h1>Smart Medicine Scanner & Salt Matcher</h1>
+                    <p>Upload a medicine strip. The AI identifies brand name, active composition, and certified generic salt alternatives.</p>
+                </div>
+
+                <div class="card">
+                    <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="processMedicineImage(event)">
+                    <div class="dropzone" onclick="document.getElementById('imageInput').click()">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <h3>Click to Upload Photo</h3>
+                        <p>Supports JPG, PNG (Dual-Scan Fallback Enabled)</p>
+                        <img id="preview-img" alt="Uploaded Strip Preview">
+                    </div>
+
+                    <div class="progress-wrapper" id="scanner-progress-box">
+                        <div class="progress-text">
+                            <span id="scanner-status">Initializing OCR scan...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="result-scanner" class="result-box">
+                    <div class="alert-success">
+                        <div class="alert-icon"><i class="fa-solid fa-capsules"></i></div>
+                        <div class="alert-content">
+                            <h4>Scanned Medicine Brand</h4>
+                            <h2 id="medicine-title">Medicine Name</h2>
+                        </div>
+                    </div>
+
+                    <div class="generic-card">
+                        <div class="generic-icon"><i class="fa-solid fa-building-ngo"></i></div>
+                        <div class="generic-content">
+                            <h3>Generic Equivalent / Alternative</h3>
+                            <p id="generic-text">Loading generic formulation...</p>
+                        </div>
+                    </div>
+
+                    <div class="data-grid">
+                        <div class="data-card">
+                            <div class="data-card-header"><i class="fa-solid fa-flask-vial"></i> Active Salt & Strength</div>
+                            <div class="data-card-body" id="composition-text"></div>
+                        </div>
+                        <div class="data-card">
+                            <div class="data-card-header"><i class="fa-solid fa-hand-holding-medical"></i> Primary Medical Uses</div>
+                            <div class="data-card-body" id="usage-text"></div>
+                        </div>
+                    </div>
+
+                    <div class="data-card" style="margin-top: 20px; border-left: 4px solid #0d9488;">
+                        <div class="data-card-header"><i class="fa-solid fa-shield-halved"></i> Dosage Advice & Precautions</div>
+                        <div class="data-card-body" id="safety-text" style="color: #0f766e; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </section>
         </div>
     </main>
 
     <script>
-        function processMedicineImage(event) {
+        $(document).ready(function() {
+            $('#symptoms').select2({ placeholder: "Search symptoms manually...", allowClear: true });
+        });
+
+        // Tab Switcher
+        function switchTab(tabName) {
+            $('.tab-section').removeClass('active-tab');
+            $('.nav-item').removeClass('active');
+            
+            if (tabName === 'diagnosis') {
+                $('#section-diagnosis').addClass('active-tab');
+                $('#tab-btn-diagnosis').addClass('active');
+                $('#nav-title').text('Patient Diagnosis');
+            } else {
+                $('#section-scanner').addClass('active-tab');
+                $('#tab-btn-scanner').addClass('active');
+                $('#nav-title').text('Medicine Scanner');
+            }
+        }
+
+        // --- Voice Recognition ---
+        function startVoiceRecognition() {
+            if (!('webkitSpeechRecognition' in window)) {
+                alert("Voice feature requires Google Chrome browser.");
+                return;
+            }
+            let recognition = new webkitSpeechRecognition();
+            recognition.lang = document.getElementById('micLang').value;
+            let micBtn = document.getElementById('micBtn');
+            let nlpInput = document.getElementById('nlpInput');
+
+            recognition.onstart = function() {
+                micBtn.classList.add('mic-active');
+                micBtn.innerHTML = '<i class="fa-solid fa-microphone-lines fa-fade"></i> Listening...';
+            };
+
+            recognition.onresult = function(event) {
+                let spokenText = event.results[0][0].transcript;
+                nlpInput.value = (nlpInput.value ? nlpInput.value + " " : "") + spokenText;
+            };
+
+            recognition.onend = function() {
+                micBtn.classList.remove('mic-active');
+                micBtn.innerHTML = '<i class="fa-solid fa-microphone"></i> Speak';
+            };
+
+            recognition.start();
+        }
+
+        // --- Diagnosis Execution ---
+        function runDiagnostics() {
+            let selectedSymptoms = $('#symptoms').val() || [];
+            let nlpText = document.getElementById('nlpInput').value.trim();
+            let errorAlert = document.getElementById('error-alert');
+            let resultSection = document.getElementById('result-diagnosis');
+            let btn = document.getElementById('predictBtn');
+            let progWrapper = document.getElementById('progress-wrapper');
+            let progBar = document.getElementById('progress-bar');
+            let progText = document.getElementById('progress-status');
+            let progPercent = document.getElementById('progress-percentage');
+
+            let combinedSymptoms = [...selectedSymptoms];
+            if (nlpText !== "") {
+                let words = nlpText.split(/\s+/);
+                combinedSymptoms = combinedSymptoms.concat(words);
+            }
+
+            if (combinedSymptoms.length === 0) {
+                errorAlert.style.display = 'flex';
+                resultSection.style.display = 'none';
+                return;
+            }
+
+            errorAlert.style.display = 'none';
+            resultSection.style.display = 'none';
+            btn.style.display = 'none';
+            progWrapper.style.display = 'block';
+
+            let progress = 0;
+            progBar.style.width = '0%';
+            let interval = setInterval(() => {
+                progress += 10;
+                if (progress > 100) progress = 100;
+                progBar.style.width = progress + '%';
+                progPercent.innerText = progress + '%';
+                if (progress === 30) progText.innerText = "Translating text to English vectors...";
+                if (progress === 70) progText.innerText = "FuzzyWuzzy Symptom Matching...";
+                if (progress === 100) {
+                    clearInterval(interval);
+                    fetch('/predict', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ symptoms: combinedSymptoms })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        progWrapper.style.display = 'none';
+                        btn.style.display = 'inline-flex';
+                        if (data.error) {
+                            document.getElementById('error-alert').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + data.error;
+                            document.getElementById('error-alert').style.display = 'flex';
+                        } else {
+                            resultSection.style.display = 'block';
+                            document.getElementById('disease-name').innerText = data.disease;
+                            document.getElementById('description-text').innerText = data.description;
+                            let precList = document.getElementById('precautions-list');
+                            precList.innerHTML = "";
+                            data.precautions.forEach(prec => {
+                                let li = document.createElement('li');
+                                li.innerText = prec;
+                                precList.appendChild(li);
+                            });
+                        }
+                    })
+                    .catch(() => {
+                        progWrapper.style.display = 'none';
+                        btn.style.display = 'inline-flex';
+                        document.getElementById('error-alert').innerHTML = '<i class="fa-solid fa-plug-circle-xmark"></i> Server connection failed.';
+                        document.getElementById('error-alert').style.display = 'flex';
+                    });
+                }
+            }, 140);
+        }
+
+        // --- Image Preprocessing & Dual-Scan ---
+        function preprocessImage(imgElement) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = imgElement.naturalWidth || imgElement.width;
+            canvas.height = imgElement.naturalHeight || imgElement.height;
+            ctx.drawImage(imgElement, 0, 0);
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const d = imgData.data;
+
+            for (let i = 0; i < d.length; i += 4) {
+                let avg = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                avg = avg > 128 ? Math.min(255, avg * 1.2) : Math.max(0, avg * 0.8);
+                d[i] = avg;
+                d[i + 1] = avg;
+                d[i + 2] = avg;
+            }
+            ctx.putImageData(imgData, 0, 0);
+            return canvas.toDataURL('image/jpeg', 0.95);
+        }
+
+        async function processMedicineImage(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            // Preview image
             const preview = document.getElementById('preview-img');
             preview.src = URL.createObjectURL(file);
             preview.style.display = 'block';
 
-            const progressBox = document.getElementById('progressBox');
-            const progressStatus = document.getElementById('progressStatus');
-            const resultSection = document.getElementById('result-section');
+            const progressBox = document.getElementById('scanner-progress-box');
+            const progressStatus = document.getElementById('scanner-status');
+            const resultSection = document.getElementById('result-scanner');
 
             progressBox.style.display = 'block';
             resultSection.style.display = 'none';
-            progressStatus.innerText = "Scanning text on medicine strip (OCR Engine)...";
 
-            Tesseract.recognize(
-                file,
-                'eng',
-                { logger: m => {
-                    if (m.status === 'recognizing text') {
-                        progressStatus.innerText = `Extracting Text: ${Math.round(m.progress * 100)}%`;
-                    }
-                }}
-            ).then(({ data: { text } }) => {
-                let cleanText = text.trim();
+            try {
+                // Step 1: Scan original image
+                progressStatus.innerText = "Analyzing original photo...";
+                let ocrResult = await Tesseract.recognize(file, 'eng');
+                let cleanText = ocrResult.data.text.trim();
 
-                if (!cleanText || cleanText.length < 3) {
+                // Step 2: Fallback to enhanced version if original is unclear
+                if (!cleanText || cleanText.length < 4) {
+                    progressStatus.innerText = "Adjusting contrast for packaging reflections...";
+                    const enhancedBase64 = preprocessImage(preview);
+                    const retryResult = await Tesseract.recognize(enhancedBase64, 'eng');
+                    cleanText = retryResult.data.text.trim();
+                }
+
+                if (!cleanText) {
                     progressBox.style.display = 'none';
-                    alert("No text detected. Please upload a clearer, brighter photo.");
+                    alert("No text detected. Please upload a clearer photo.");
                     return;
                 }
 
-                progressStatus.innerText = "Analyzing salt composition & clinical database...";
-
+                // Step 3: Match via Backend
+                progressStatus.innerText = "Querying medicine & generic database...";
                 fetch('/scan-medicine', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -177,18 +457,21 @@
                     } else {
                         resultSection.style.display = 'block';
                         document.getElementById('medicine-title').innerText = data.medicine_name;
+                        document.getElementById('generic-text').innerText = data.generic_info;
                         document.getElementById('composition-text').innerText = data.composition;
                         document.getElementById('usage-text').innerText = data.usage;
+                        document.getElementById('safety-text').innerText = data.safety_note;
                     }
                 })
-                .catch(err => {
+                .catch(() => {
                     progressBox.style.display = 'none';
-                    alert("Backend processing failed. Please try again.");
+                    alert("Server connection failed.");
                 });
-            }).catch(err => {
+
+            } catch (err) {
                 progressBox.style.display = 'none';
-                alert("Client-side OCR failed to read image. Please use a clearer photo.");
-            });
+                alert("Scanning failed. Please try again.");
+            }
         }
     </script>
 </body>
