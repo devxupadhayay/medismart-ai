@@ -3,27 +3,19 @@ import pickle
 import numpy as np
 import pandas as pd
 import warnings
-import json
-import os
-import google.generativeai as genai
-from dotenv import load_dotenv
 from fuzzywuzzy import fuzz, process
 
 warnings.filterwarnings("ignore")
-load_dotenv()
 
 app = Flask(__name__)
 
-# --- 1. Load ML Model & Datasets ---
+# --- 1. Load ML Model & Reference Datasets ---
 try:
     model = pickle.load(open('model.pkl', 'rb'))
     dataset_symptoms = pickle.load(open('columns.pkl', 'rb'))
-    verified_symptoms_list = [s.replace('_', ' ').strip().lower() for s in dataset_symptoms]
 except Exception as e:
-    print(f"Model loading error: {e}")
     model = None
     dataset_symptoms = []
-    verified_symptoms_list = []
 
 try:
     description_df = pd.read_csv('symptom_Description.csv')
@@ -32,25 +24,45 @@ except Exception as e:
     description_df = pd.DataFrame()
     precaution_df = pd.DataFrame()
 
-# --- 2. Configure Google Gemini Brain ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model_gemini = genai.GenerativeModel("gemini-1.5-flash")
-    except Exception as e:
-        model_gemini = None
-        print(f"Gemini Init Error: {e}")
-else:
-    model_gemini = None
-    print("Warning: GEMINI_API_KEY missing in .env")
+# --- 2. Master Multilingual Intent & Symptom Lexicon ---
+GREETINGS = [
+    "good morning", "good evening", "good afternoon", "good night", "hello", "hi", "hey",
+    "namaste", "नमस्ते", "नमस्कार", "kaise ho", "kya haal", "hlw", "hlo", "thank you", "thanks"
+]
 
-# --- 3. Complete Expanded Medicine Database (25+ Indian Formulations) ---
+HAIR_TERMS = [
+    "बाल", "झड़", "झड़", "hair", "hairfall", "hair fall", "dandruff", "alopecia", "baal", "jharna", "jhad", "tute", "scalp"
+]
+
+ACNE_TERMS = [
+    "pimple", "pimples", "acne", "कील", "मुहासे", "मुहाँसे", "daane", "chehre", "phusi"
+]
+
+FEVER_TERMS = [
+    "बुखार", "bukhar", "fever", "tap", "ताप", "temperature", "garam", "pyrexia", "hararat", "हल्का बुखार", "तेज बुखार"
+]
+
+COLD_TERMS = [
+    "सर्दी", "sardi", "cold", "khasi", "खांसी", "cough", "jukham", "जुकाम", "chheenk", "छींक", "gala", "गले", "kharash", "throat", "runny"
+]
+
+HEADACHE_TERMS = [
+    "sir dard", "sirdard", "sir me dard", "सर दर्द", "सिर दर्द", "सरदर्द", "headache", "sar dard", "matha", "migraine"
+]
+
+STOMACH_TERMS = [
+    "pet dard", "pet me dard", "पेट दर्द", "पेट में दर्द", "stomach pain", "abdominal pain",
+    "dast", "दस्त", "loose motion", "latrine", "diarrhea", "diarrhoea",
+    "ulti", "उल्टी", "vomit", "vomiting", "nausea", "ji michlana",
+    "acidity", "gas", "jalan", "seene me jalan", "एसिडिटी", "गैस"
+]
+
+# --- 3. Medicine Knowledge Base ---
 MEDICINE_DATABASE = {
     "paracetamol": {
         "name": "Paracetamol (Dolo 650 / Paracip 500 / Calpol)",
-        "aliases": ["paracip", "dolo", "calpol", "crocin", "acetaminophen", "pacimol", "febrex", "wracip", "poeromo", "tablets ip 500", "500 mg", "650 mg"],
-        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). Available at all PM Jan Aushadhi Kendras.",
+        "aliases": ["paracip", "dolo", "calpol", "crocin", "acetaminophen", "pacimol", "febrex", "wracip", "500 mg", "650 mg"],
+        "generic_info": "Generic Salt: Paracetamol IP (500mg / 650mg). PM Jan Aushadhi Kendra available.",
         "composition": "Paracetamol IP - Pure Analgesic & Antipyretic Agent",
         "usage": "Relief from mild to high fever, tension headache, body ache, and toothache.",
         "safety_note": "Maximum daily limit is 4000mg. Keep a 4-6 hour gap between doses. Avoid alcohol."
@@ -71,37 +83,13 @@ MEDICINE_DATABASE = {
         "usage": "Treats bacterial throat tonsillitis, chest infections, sinusitis, and skin infections.",
         "safety_note": "Take 1 hour before or 2 hours after food. Consume once daily for 3 to 5 days."
     },
-    "montelukast": {
-        "name": "Montelukast + Levocetirizine (Montair-LC / Montek-LC)",
-        "aliases": ["montair", "montek", "levocet", "monticope", "telekast", "montair-lc", "montek-lc"],
-        "generic_info": "Generic Salt: Montelukast Sodium (10mg) + Levocetirizine HCl (5mg).",
-        "composition": "Leukotriene Receptor Antagonist + Non-sedating Antihistamine",
-        "usage": "Relief from allergic asthma, chronic sneezing, allergic rhinitis, and night-time coughing.",
-        "safety_note": "Best taken at bedtime as it may cause mild relaxation/sleepiness."
-    },
-    "cetirizine": {
-        "name": "Cetirizine 10mg (Okacet / Cetzine / Alerid)",
-        "aliases": ["okacet", "cetzine", "alerid", "zyrtec", "cetriz", "cetirizine"],
-        "generic_info": "Generic Salt: Cetirizine Hydrochloride IP 10mg.",
-        "composition": "Second-Generation Antihistaminic Agent",
-        "usage": "Relieves runny nose, watery eyes, urticaria, skin itching, and dust allergy.",
-        "safety_note": "May cause mild drowsiness. Avoid driving immediately after consumption."
-    },
     "pantoprazole": {
         "name": "Pantoprazole 40mg (Pan 40 / Pantocid / Pantodac)",
-        "aliases": ["pan 40", "pan40", "pantocid", "pantosec", "pantodac", "pantoprazole"],
+        "aliases": ["pan 40", "pan40", "pantocid", "pantosec", "pantodac", "pantoprazole", "pan-d", "pand"],
         "generic_info": "Generic Salt: Pantoprazole Gastro-Resistant Tablets IP 40mg.",
         "composition": "Proton Pump Inhibitor (Gastric Acid Reducer)",
         "usage": "Controls severe gastric acidity, GERD, heartburn, stomach ulcers, and acid reflux.",
         "safety_note": "Take once daily in the morning, 30 minutes before your first meal/breakfast."
-    },
-    "pantoprazole_domperidone": {
-        "name": "Pantoprazole + Domperidone (Pan-D / Pantocid-D)",
-        "aliases": ["pan-d", "pand", "pantocid-d", "pantosec-d", "pantodac-dsr"],
-        "generic_info": "Generic Salt: Pantoprazole (40mg) + Domperidone (30mg SR) Capsule.",
-        "composition": "Acid Reducer + Prokinetic Anti-emetic",
-        "usage": "Acidity accompanied by nausea, morning vomiting, indigestion, and acid fullness.",
-        "safety_note": "Strictly take empty stomach in the morning with plain water."
     },
     "combiflam": {
         "name": "Ibuprofen + Paracetamol (Combiflam / Flexon)",
@@ -110,207 +98,137 @@ MEDICINE_DATABASE = {
         "composition": "Dual-action NSAID Analgesic & Anti-inflammatory",
         "usage": "Acute muscular pain, sprains, dental surgery pain, and joint swelling.",
         "safety_note": "Always consume strictly after a full meal to prevent stomach gastric irritation."
-    },
-    "metformin": {
-        "name": "Metformin 500mg (Glycomet 500 / Obimet)",
-        "aliases": ["glycomet", "obimet", "metfor", "metformin 500", "metformin hydrochloride"],
-        "generic_info": "Generic Salt: Metformin Hydrochloride Sustained Release IP 500mg.",
-        "composition": "Biguanide Class Antidiabetic Agent",
-        "usage": "Controls blood sugar levels in Type 2 Diabetes Mellitus and PCOS.",
-        "safety_note": "Take with or after main meals to avoid stomach upset. Monitor sugar regularly."
-    },
-    "telmisartan": {
-        "name": "Telmisartan 40mg (Telma 40 / Telvas 40)",
-        "aliases": ["telma", "telvas", "telmikind", "telsartan", "telmisartan 40"],
-        "generic_info": "Generic Salt: Telmisartan Tablets IP 40mg.",
-        "composition": "Angiotensin II Receptor Blocker (Antihypertensive)",
-        "usage": "Lowers high blood pressure (hypertension) and protects heart/kidneys.",
-        "safety_note": "Take at the same fixed time daily. Do not stop abruptly without doctor advice."
-    },
-    "ors": {
-        "name": "Oral Rehydration Salts (WHO-Formula ORS / Electral)",
-        "aliases": ["electral", "ors", "rehydrate", "w.h.o. formula", "energy drink powder"],
-        "generic_info": "Generic Salt: Standard WHO Formulation Oral Rehydration Salts.",
-        "composition": "Sodium Chloride + Potassium Chloride + Sodium Citrate + Anhydrous Dextrose",
-        "usage": "Treats severe dehydration caused by diarrhoea, vomiting, summer heat, or heavy sweating.",
-        "safety_note": "Dissolve entire packet in correct measured water (usually 1 litre). Consume within 24 hours."
-    },
-    "ciprofloxacin": {
-        "name": "Ciprofloxacin 500mg (Ciplox 500 / Cifran)",
-        "aliases": ["ciplox", "cifran", "cipro", "ciprobid", "ciprofloxacin"],
-        "generic_info": "Generic Salt: Ciprofloxacin Hydrochloride 500mg Tablet IP.",
-        "composition": "Fluoroquinolone Antibacterial Agent",
-        "usage": "Treats bacterial stomach diarrhoea, typhoid, urinary tract, and bone infections.",
-        "safety_note": "Drink plenty of water to prevent crystal formation in kidneys."
-    },
-    "omeprazole": {
-        "name": "Omeprazole 20mg (Omez / Ocid)",
-        "aliases": ["omez", "ocid", "omecip", "omeprazole 20"],
-        "generic_info": "Generic Salt: Omeprazole Capsules IP 20mg.",
-        "composition": "Proton Pump Inhibitor",
-        "usage": "Relief from acid indigestion, gas heartburn, and stomach ulcers.",
-        "safety_note": "Take in the morning 30 minutes before breakfast."
     }
 }
 
-# --- 4. Master Clinical Triage NLP Engine ---
-def master_triage_engine(raw_text):
-    clean = raw_text.lower().strip()
-    
-    # Tier 1: Casual Greetings & Inquiries
-    greetings = ["hi", "hello", "hey", "good morning", "good evening", "good afternoon", "namaste", "kaise ho", "kya haal hai", "thank you", "thanks", "hlw", "hlo"]
-    if clean in greetings or any(clean == g for g in greetings):
-        return {
-            "type": "CHAT",
-            "bot_response": "Namaste! Main aapka MediSmart AI Health Assistant hoon. Aapko kya takleef ya lakshan mehsoos ho rahe hain? (Jaise: bukhar, sardi, sir dard, pet dard)"
-        }
+# --- 4. Triage NLP Processor ---
+def parse_clinical_query(raw_text):
+    text = raw_text.lower().strip()
 
-    # Tier 2: Skin & Hair Conditions (Outside Kaggle 41 dataset)
-    if any(w in clean for w in ["baal", "bal", "hair", "hairfall", "hair fall", "dandruff", "jharna", "jhad", "alopecia"]):
+    # 1. Greetings Intent
+    if any(g == text or g in text for g in GREETINGS) and len(text.split()) <= 4:
+        if not any(f in text for f in FEVER_TERMS + COLD_TERMS + STOMACH_TERMS):
+            return {
+                "type": "CHAT",
+                "bot_response": "Namaste! Main aapka MediSmart AI Health Assistant hoon. Aaj aapki sehat se judi kis takleef ya lakshan me madad kar sakta hoon?"
+            }
+
+    # 2. Hair Fall Intent
+    if any(p in text for p in HAIR_TERMS):
         return {
             "type": "DIRECT",
             "disease_name": "Excessive Hair Fall / Telogen Effluvium",
-            "bot_response": "Baal jhadna aam taur par nutritional deficiency (Iron/Biotin), stress, seasonal changes ya hard water ki wajah se hota hai.",
-            "description": "Daily 50-100 baal jhadna natural hai, lekin zyada jhadne par diet aur care badalna zaroori hai.",
+            "bot_response": "Baal jhadna aam taur par nutritional deficiency (Iron, Biotin, Protein), stress ya hard water ki wajah se hota hai.",
+            "description": "Daily 50-100 baal jhadna natural hai, lekin zyada baal tutne par proper nutrition aur scalp care zaroori hai.",
             "precautions": [
-                "Protein, Anda, Palak aur Biotin rich food diet me add karein",
-                "Chemical shampoo kam karein aur Coconut/Castor oil lagayein",
-                "Stress kam karein aur proper 7-8 ghante ki neend lein",
-                "Agar problem continue rahe toh Dermatologist se Blood test karwayein"
+                "Protein, Anda, Palak, Amla aur Biotin rich food diet me shamil karein",
+                "Harsh chemical shampoo band karein aur mild sulphate-free shampoo use karein",
+                "Coconut ya Castor oil se scalp par halke haath se massage karein",
+                "Proper 7-8 ghante ki neend lein aur dermatologist se blood test (Ferritin/B12) karwayein"
             ]
         }
 
-    if any(w in clean for w in ["keel", "muhase", "pimples", "acne", "pimple", "daane chehre"]):
+    # 3. Skin Acne Intent
+    if any(p in text for p in ACNE_TERMS):
         return {
             "type": "DIRECT",
             "disease_name": "Acne Vulgaris (Facial Pimples)",
-            "bot_response": "Pimples oily skin, hormonal changes ya dust/pollution se pores block hone par hote hain.",
-            "description": "Skin pores me bacteria aur oil jama hone ki wajah se daane nikalte hain.",
+            "bot_response": "Pimples oily skin, hormonal imbalance ya pores block hone ki wajah se hote hain.",
+            "description": "Sebum aur dead skin cells pores me jama hone se pimples aur redness paida hoti hai.",
             "precautions": [
-                "Din me 2-3 baar Salicylic acid facewash se chehra dhoyein",
-                "Pimples ko haath se na fodein",
-                "Tali-bhuni aur oily cheezon se parhez karein",
-                "Pani ki matra badhayein"
+                "Din me 2 baar Salicylic acid ya Neem facewash se chehra dhoyein",
+                "Pimples ko haath se touch ya pop bilkul na karein",
+                "Tali-bhuni, junk aur oily food se parhez karein",
+                "Din me 3-4 litre paani piyein aur hydration banaye rakhein"
             ]
         }
 
-    # Tier 3: Direct Priority Combinations (Guarantees zero AIDS/Piles on Fever+Cold)
-    has_fever = any(w in clean for w in ["bukhar", "बुखार", "fever", "tap", "temperature", "garam"])
-    has_cold = any(w in clean for w in ["sardi", "सर्दी", "cold", "khasi", "खांसी", "cough", "jukham", "chheenk", "chheenkein", "gala", "throat"])
-    has_headache = any(w in clean for w in ["sirdard", "sir dard", "सर दर्द", "headache", "sar dard"])
-    has_stomach = any(w in clean for w in ["pet dard", "pet kharab", "dast", "loose motion", "ulti", "vomit", "acidity", "gas", "jalan"])
+    # Core Symptoms Flags
+    is_fever = any(p in text for p in FEVER_TERMS)
+    is_cold = any(p in text for p in COLD_TERMS)
+    is_headache = any(p in text for p in HEADACHE_TERMS)
+    is_stomach = any(p in text for p in STOMACH_TERMS)
 
-    # Fever + Cold/Cough
-    if has_fever and has_cold:
+    # 4. Fever + Cold (Flu)
+    if is_fever and is_cold:
         return {
             "type": "DIRECT",
             "disease_name": "Seasonal Influenza / Viral Cold Flu",
-            "bot_response": "Bukhar ke sath sardi aur khasi hona aam seasonal viral respiratory infection (Flu) ka sanket hai.",
-            "description": "Yeh infection mausam badlav ke samay aam taur par 3 se 5 din tak rehta hai. Isme gala kharab aur body ache bhi hota hai.",
+            "bot_response": "Bukhar ke sath sardi, khasi aur gale me kharash aam viral flu infection ke lakshan hain.",
+            "description": "Viral flu mausam badlav ke samay aam taur par 3 se 5 din tak rehta hai. Isme halka badan dard aur thakan bhi hoti hai.",
             "precautions": [
-                "Paracetamol (500mg) for fever relief",
-                "Steam inhalation (Bhaap lein) aur garm namak paani se gargle karein",
-                "Garm soup, adrak chai aur fluids zyada matra me lein",
-                "Agar bukhar 102°F se upar jaye toh doctor se checkup karwayein"
+                "Paracetamol (500mg/650mg) as advised for fever and body ache",
+                "Steam inhalation (Bhaap lein) din me 2 baar aur gungune namak paani se gargle karein",
+                "Garm soup, adrak-tulsi chai aur liquid fluids zyada matra me lein",
+                "Agar bukhar 102°F se zyada ho ya 4 din se upar rahe toh doctor se consult karein"
             ]
         }
 
-    # Fever + Headache
-    if has_fever and has_headache:
+    # 5. Fever + Headache
+    if is_fever and is_headache:
         return {
             "type": "DIRECT",
-            "disease_name": "Acute Viral Pyrexia with Tension Headache",
-            "bot_response": "Bukhar ke sath sir dard aam viral infection, dehydration aur physical thakan ka sanket hai.",
-            "description": "Sharir me viral strain ki wajah se sir me bhari-pan aur body temperature badhta hai.",
+            "disease_name": "Acute Viral Pyrexia with Tension Cephalea",
+            "bot_response": "Bukhar ke sath sir dard viral infection, dehydration ya sharirik thakan ka sanket hai.",
+            "description": "Sharir me viral strain aur dehydration ki wajah se sir me dard aur temperature badhta hai.",
             "precautions": [
-                "Paracetamol (500mg) as advised for temperature",
-                "Shant andhere kamre me aaram karein",
-                "Mobile aur screen time kam karein",
-                "Pani aur ORS ka liquid intake banaye rakhein"
+                "Paracetamol (500mg) for fever and pain relief",
+                "Shant aur andhere kamre me aaram karein",
+                "Mobile, TV aur laptop screen time se parhez karein",
+                "ORS ya nariyal paani piyein taaki dehydration na ho"
             ]
         }
 
-    # Stomach Issues
-    if has_stomach:
+    # 6. Stomach Infection
+    if is_stomach:
         return {
             "type": "DIRECT",
-            "disease_name": "Acute Gastroenteritis / Stomach Infection",
-            "bot_response": "Pet me dard, dast ya ulti aam taur par contaminated food ya stomach viral/bacterial infection se hoti hai.",
-            "description": "Is infection me dehydration ka sabse bada risk hota hai.",
+            "disease_name": "Acute Gastroenteritis (Stomach Infection)",
+            "bot_response": "Pet dard, loose motion ya ulti aam taur par food infection ya stomach virus ki wajah se hoti hai.",
+            "description": "Is infection me dehydration ka sabse bada khatra hota hai, isliye liquid balance sabse zaroori hai.",
             "precautions": [
-                "ORS (Electral) paani har thodi der me piyein",
-                "Khane me dahi, khichdi aur kela jaise halki cheezein lein",
-                "Tali-bhuni aur spicy cheezon se bilkul parhez karein",
-                "Agar ulti continue rahe toh clinic par doctor ko dikhayein"
+                "ORS (Electral) paani har 1 ghante me thoda-thoda lagatar piyein",
+                "Khane me dahi, khichdi aur kela jaise light digestible food lein",
+                "Tali-bhuni, masaledar aur bahar ki cheezon se bilkul parhez karein",
+                "Agar ulti 24 ghante se zyada na ruke toh clinic par doctor se milen"
             ]
         }
 
-    # Single Fever (Interactive Follow-up)
-    if has_fever and not has_cold and not has_stomach and not has_headache:
+    # 7. Isolated Fever (Follow-up chips)
+    if is_fever and not is_cold and not is_headache and not is_stomach:
         return {
             "type": "FOLLOW_UP",
             "disease_name": "Viral Pyrexia (Acute Viral Fever)",
-            "bot_response": "Sirf bukhar aana aam viral infection ya seasonal change ka sanket hai. Kya aapko inme se koi aur lakshan bhi hai?",
+            "bot_response": "Sirf bukhar aana aam viral infection ya seasonal badlav ka sanket hai. Kya aapko inme se koi aur lakshan bhi hai?",
             "follow_up_symptoms": ["Sardi / Khasi", "Sir Dard", "Thand Lagna (Chills)", "Kamzori / Body Pain"],
-            "description": "Akela bukhar aksar aam viral attack se hota hai. Specific bimari janne ke liye follow-up lakshan select karein.",
+            "description": "Akela bukhar aksar aam viral attack se hota hai. Specific bimari janne ke liye follow-up select karein.",
             "precautions": [
-                "Paracetamol (500mg) for fever control",
+                "Paracetamol (500mg) as advised for temperature control",
                 "Pani aur nariyal paani ka sevan badhayein",
-                "Gili patti (Cold compress) lagayein agar bukhar tez ho",
-                "Doctor se consult karein agar bukhar 3 din se zyada rahe"
+                "Gili patti (Cold compress) lagayein agar temperature tez ho",
+                "3 din se zyada bukhar par doctor se blood test karwayein"
             ]
         }
 
-    # Single Headache
-    if has_headache and not has_fever:
+    # 8. Isolated Headache
+    if is_headache and not is_fever:
         return {
             "type": "DIRECT",
-            "disease_name": "Tension Headache / Eye Strain",
-            "bot_response": "Akela sir dard thakan, dehydration ya screen strain ki wajah se hota hai.",
-            "description": "Neend ki kami aur continuous screen work sir dard ka sabse aam karan hai.",
+            "disease_name": "Tension Headache / Screen Eye Strain",
+            "bot_response": "Akela sir dard neend ki kami, screen stress ya dehydration ki wajah se hota hai.",
+            "description": "Aam taur par continuous work aur dehydration se sir ki blood vessels me tension badhti hai.",
             "precautions": [
-                "Pani piyein aur 30 minute aaram karein",
-                "Screen time kam karein aur aankhein band karke rest karein",
-                "Shant aur andhere kamre me rest karein"
+                "Khoob saara paani piyein aur 30 minute aaram karein",
+                "Screen time band karein aur aankhein band karke rest karein",
+                "Shant aur thande kamre me rest karein"
             ]
         }
 
-    # Tier 4: Gemini LLM Fallback (If online)
-    if model_gemini:
-        prompt = f"""
-        You are MediSmart, a clinical triage assistant.
-        Analyze user text: "{raw_text}" (Hindi/Hinglish/Marathi/English).
-        
-        Respond ONLY with a valid JSON format:
-        {{
-            "disease_name": "Condition Name",
-            "bot_response": "1-2 sentence empathetic overview in Hindi/Hinglish.",
-            "description": "Clinical description.",
-            "precautions": ["Precaution 1", "Precaution 2", "Precaution 3", "Precaution 4"]
-        }}
-        """
-        try:
-            resp = model_gemini.generate_content(prompt)
-            txt = resp.text.strip()
-            if txt.startswith("```json"): txt = txt[7:]
-            if txt.startswith("```"): txt = txt[3:]
-            if txt.endswith("```"): txt = txt[:-3]
-            parsed = json.loads(txt.strip())
-            return {
-                "type": "DIRECT",
-                "disease_name": parsed.get("disease_name", "General Health Assessment"),
-                "bot_response": parsed.get("bot_response", "Aapke lakshano ka evaluation:"),
-                "description": parsed.get("description", "Evaluation completed."),
-                "precautions": parsed.get("precautions", ["Rest adequately", "Stay hydrated", "Consult doctor"])
-            }
-        except Exception as e:
-            print(f"Gemini API parse fallback: {e}")
-
-    # Tier 5: Random Forest Matcher
+    # 9. Dataset Machine Learning Matching
     matched_symptoms = []
     for s in dataset_symptoms:
         clean_s = s.replace('_', ' ').lower()
-        if clean_s in clean or s in clean:
+        if clean_s in text or s in text:
             matched_symptoms.append(s)
 
     if len(matched_symptoms) >= 1 and model:
@@ -324,7 +242,7 @@ def master_triage_engine(raw_text):
         if disease.lower() in ['aids', 'dimorphic hemmorhoids(piles)', 'hepatitis a', 'paralysis (brain hemorrhage)', 'tuberculosis']:
             disease = "Seasonal Viral Syndrome"
 
-        desc = f"Clinical pattern matched {len(matched_symptoms)} symptoms."
+        desc = f"Clinical pattern matched {len(matched_symptoms)} verified symptom(s)."
         if not description_df.empty and 'Disease' in description_df.columns:
             m = description_df[description_df['Disease'].str.lower() == disease.lower()]
             if not m.empty:
@@ -347,15 +265,20 @@ def master_triage_engine(raw_text):
             "precautions": precautions if precautions else ["Paryapt aaram karein", "Hydration maintain karein", "Doctor se checkup karwayein"]
         }
 
+    # Default Contextual Summary
     return {
         "type": "DIRECT",
         "disease_name": "General Health Assessment",
-        "bot_response": "Aapke bataye gaye lakshano ka evaluation:",
-        "description": "Yeh aam seasonal infection ya physical strain ka sanket ho sakta hai.",
-        "precautions": ["Pani aur ORS ka liquid intake badhayein", "Proper aaram karein", "Agar takleef badhe toh doctor se milein"]
+        "bot_response": "Aapke bataye gaye lakshano ka assessment:",
+        "description": "Yeh sharirik thakan, mausam badlav ya mild seasonal infection ka sanket ho sakta hai.",
+        "precautions": [
+            "Pani aur ORS ka liquid intake badhayein",
+            "Proper 7-8 ghante ki neend aur aaram karein",
+            "Agar takleef 3 din se zyada rahe toh clinic par doctor se milein"
+        ]
     }
 
-# --- 5. Application Endpoints ---
+# --- 5. Flask Endpoints ---
 @app.route('/')
 def home():
     return render_template('index.html', symptoms=dataset_symptoms)
@@ -372,7 +295,7 @@ def predict():
         if not user_text:
             return jsonify({'error': 'Kripya apne lakshan likhein ya select karein.'})
 
-        res = master_triage_engine(user_text)
+        res = parse_clinical_query(user_text)
 
         if res.get("type") == "CHAT":
             return jsonify({
@@ -398,8 +321,7 @@ def predict():
         })
 
     except Exception as e:
-        print(f"Prediction Error: {e}")
-        return jsonify({'error': 'Diagnosis evaluation failed. Please try again.'})
+        return jsonify({'error': 'Diagnosis process karne me dikkat aayi. Kripya dobara try karein.'})
 
 @app.route('/scan-medicine', methods=['POST'])
 def scan_medicine():
